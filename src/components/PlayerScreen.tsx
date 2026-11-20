@@ -149,6 +149,19 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
               // Streams are proxied same-origin; keep buffering modest for live.
               lowLatencyMode: true,
               backBufferLength: 30,
+              // The rolling upstream keeps only ~2 segments fetchable at a time:
+              // hold a tighter buffer, start at the live edge, and retry the
+              // playlist quickly so a missed segment can't stall the stream.
+              maxBufferLength: 8,
+              maxMaxBufferLength: 16,
+              maxBufferSize: 30 * 1000 * 1000,
+              liveSyncDurationCount: 2,
+              liveDurationInfinity: false,
+              fragLoadingMaxRetry: 6,
+              manifestLoadingMaxRetry: 4,
+              levelLoadingMaxRetry: 4,
+              fragLoadingRetryDelay: 500,
+              manifestLoadingRetryDelay: 500,
             });
             hlsRef.current = hls;
             hls.loadSource(videoUrl);

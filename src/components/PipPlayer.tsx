@@ -92,7 +92,16 @@ export const PipPlayer: React.FC<PipPlayerProps> = ({
           const { default: Hls } = await import('hls.js');
           if (cancelled) return;
           if (Hls.isSupported()) {
-            hls = new Hls({ lowLatencyMode: true, backBufferLength: 30 });
+            hls = new Hls({
+              lowLatencyMode: true,
+              backBufferLength: 30,
+              // Same rolling-window tuning as the player screen.
+              maxBufferLength: 8,
+              maxMaxBufferLength: 16,
+              liveSyncDurationCount: 2,
+              fragLoadingMaxRetry: 6,
+              fragLoadingRetryDelay: 500,
+            });
             hlsRef.current = hls;
             hls.loadSource(streamUrl);
             hls.attachMedia(video);

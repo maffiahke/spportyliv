@@ -72,7 +72,10 @@ function buildUpstreamHeaders(headers: StreamHeaders, forward: URLSearchParams):
   const out: Record<string, string> = {
     'user-agent': headers.userAgent || 'VLC/3.0.20 LibVLC/3.0.20',
     accept: '*/*',
-    connection: 'close',
+    // Keep the upstream connection alive: undici reuses it for the playlist
+    // ping + segment fetches, saving a TCP+TLS handshake per segment (~0.4s
+    // on slow origins). Forcing `close` here was a measurable buffer stall.
+    connection: 'keep-alive',
   };
   if (headers.referer) out.referer = headers.referer;
   if (headers.origin) out.origin = headers.origin;
@@ -390,7 +393,10 @@ async function handleStreamProxy(
       const rewritten = rewriteM3U8(text, currentUrl, headers, '/api/iptv/stream');
       res.statusCode = upstream.status;
       res.setHeader('content-type', contentType.includes('mpegurl') ? contentType : 'application/vnd.apple.mpegurl');
-      res.setHeader('cache-control', 'no-store');
+      // Clients (and any CDN hop) must always re-fetch the live playlist; but
+      // let the browser cache it for a moment to smooth the polling loop.
+      res.setHeader('cache-control', 'no-store, max-age=0');
+      res.setHeader('access-control-allow-origin', '*');
       res.end(rewritten);
     } catch (err) {
       res.statusCode = 502;
@@ -406,14 +412,23 @@ async function handleStreamProxy(
     const v = upstream.headers.get(h);
     if (v) res.setHeader(h, v);
   }
-  res.setHeader('cache-control', 'no-store');
+  res.setHeader('cache-control', 'public, max-age=2');
+  res.setHeader('access-control-allow-origin', '*');
   if (!upstream.body) {
     res.end();
     return;
   }
   const nodeStream = Readable.fromWeb(upstream.body as import('stream/web').ReadableStream);
+  // Backpressure: if the client stalls, stop reading upstream instead of
+  // piling the whole segment into memory.
+  nodeStream.on('error', () => {
+    upstream?.body?.cancel().catch(() => undefined);
+    res.destroy();
+  });
+  req.on('close', () => {
+    if (!res.writableEnded) upstream?.body?.cancel().catch(() => undefined);
+  });
   nodeStream.pipe(res);
-  nodeStream.on('error', () => res.destroy());
 }
 
 /** Probe a stream URL without playing: used by the admin "Test stream" button. */
