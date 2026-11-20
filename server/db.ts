@@ -492,7 +492,12 @@ export async function persistSnapshot(
         update: { revision: { increment: 1 } },
       });
     },
-    { timeout: 30_000, maxWait: 10_000 },
+    // A first boot against Neon seeds every row in one transaction, which can
+    // exceed 30s on a cold compute or a high-latency pooled connection.
+    {
+      timeout: Number(process.env.STORE_PERSIST_TIMEOUT_MS ?? 30_000),
+      maxWait: 10_000,
+    },
   );
 
   return meta.revision;
