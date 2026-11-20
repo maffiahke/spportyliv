@@ -1,4 +1,4 @@
-import { SportCategoryId } from './sports';
+import { SportCategoryId } from './sports.js';
 
 /** Extra HTTP headers that must be sent when fetching an IPTV stream. */
 export interface StreamHeaders {

@@ -12,11 +12,11 @@ import {
   IptvPlaylist,
   PushPrefs,
   SiteSettings,
-} from '../src/types/iptv';
-import { buildSeedUpcomingEvents } from '../src/data/seedEvents';
-import { hasDatabase, loadSnapshot, persistSnapshot, prisma, readRevision } from './db';
+} from '../src/types/iptv.js';
+import { buildSeedUpcomingEvents } from '../src/data/seedEvents.js';
+import { hasDatabase, loadSnapshot, persistSnapshot, prisma, readRevision } from './db.js';
 
-export type { PushPrefs } from '../src/types/iptv';
+export type { PushPrefs } from '../src/types/iptv.js';
 
 /** A stored browser push subscription (admin console devices). */
 export interface PushSubscriptionRecord {
@@ -189,7 +189,10 @@ async function initStore(): Promise<void> {
     if (snapshot.initialized) {
       cache = snapshot.data;
       revision = snapshot.revision;
-      lastPersisted = snapshot.data;
+      // Keep a distinct copy: the diff in persistSnapshot relies on this not
+      // sharing references with the mutable live cache (viewer sign-up pushes
+      // into `store.users`, admin edits mutate nested objects).
+      lastPersisted = structuredClone(snapshot.data);
       if (healDuplicateChannelIds(cache)) await saveStore();
     } else {
       // First boot against a fresh Neon database: carry the existing JSON store
@@ -197,7 +200,7 @@ async function initStore(): Promise<void> {
       const legacy = readJsonStore();
       cache = normalize(legacy ?? structuredClone(EMPTY));
       revision = await persistSnapshot(cache, null);
-      lastPersisted = cache;
+      lastPersisted = structuredClone(cache);
       console.log(
         `[store] seeded Neon from ${legacy ? 'server/data/store.json' : 'built-in defaults'}: ` +
           `${cache.channels.length} channels, ${cache.playlists.length} playlists`,
@@ -295,7 +298,7 @@ export async function syncFromDatabase(): Promise<boolean> {
   const snapshot = await loadSnapshot();
   if (!snapshot || !snapshot.initialized) return false;
   cache = snapshot.data;
-  lastPersisted = snapshot.data;
+  lastPersisted = structuredClone(snapshot.data);
   revision = snapshot.revision;
   emit(revision);
   return true;

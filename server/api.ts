@@ -5,10 +5,10 @@ import {
   scryptSync,
   timingSafeEqual as nodeTimingSafeEqual,
 } from 'crypto';
-import { findCountry } from '../src/data/countries';
-import type { AppUser } from '../src/types/user';
+import { findCountry } from '../src/data/countries.js';
+import type { AppUser } from '../src/types/user.js';
 import { Readable } from 'stream';
-import { guessSport, parseM3U, shortCode } from '../src/lib/m3u';
+import { guessSport, parseM3U, shortCode } from '../src/lib/m3u.js';
 import {
   AD_PLACEMENT_IDS,
   AdminBanner,
@@ -19,7 +19,7 @@ import {
   IptvChannel,
   IptvPlaylist,
   StreamHeaders,
-} from '../src/types/iptv';
+} from '../src/types/iptv.js';
 import {
   ensureStoreReady,
   getAppData,
@@ -34,7 +34,7 @@ import {
   type StoredUser,
   type StoreData,
   type UserSessionRecord,
-} from './store';
+} from './store.js';
 import {
   addSubscription,
   getPushPrefs,
@@ -46,7 +46,7 @@ import {
   removeSubscription,
   savePushPrefs,
   sendPush,
-} from './push';
+} from './push.js';
 
 const PROXY_HOPS = 6;
 const PROXY_TIMEOUT_MS = 20_000;

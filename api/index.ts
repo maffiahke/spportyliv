@@ -6,8 +6,8 @@
  * served from the CDN and `vercel.json` rewriting every /api/* path here.
  */
 import express from 'express';
-import { handleApiRequest, startAutoSync } from '../server/api';
-import { isServerlessRuntime } from '../server/store';
+import { handleApiRequest, startAutoSync } from '../server/api.js';
+import { isServerlessRuntime } from '../server/store.js';
 
 const app = express();
 

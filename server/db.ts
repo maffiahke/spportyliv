@@ -8,15 +8,15 @@ import type {
   IptvPlaylist,
   SiteSettings,
   StreamHeaders,
-} from '../src/types/iptv';
-import { DEFAULT_ADS_SETTINGS, DEFAULT_SITE_SETTINGS } from '../src/types/iptv';
+} from '../src/types/iptv.js';
+import { DEFAULT_ADS_SETTINGS, DEFAULT_SITE_SETTINGS } from '../src/types/iptv.js';
 import type {
   PushSubscriptionRecord,
   StoredUser,
   StoreData,
   UserSessionRecord,
   VapidKeys,
-} from './store';
+} from './store.js';
 
 /** True when a Neon/Postgres connection string is configured. */
 export const DATABASE_URL = (process.env.DATABASE_URL ?? '').trim();
@@ -427,18 +427,18 @@ export async function persistSnapshot(
   }
 
 
-  /* users + sessions (session first on delete, user after) */
-  const s = list(data.userSessions, previous?.userSessions ?? [], (x) => x.tokenHash);
-  for (const row of [...s.add, ...s.change]) {
-    const rec = sessionRecord(row);
-    ops.push((tx) => tx.userSession.upsert({ where: { tokenHash: row.tokenHash }, create: rec, update: rec }));
-  }
-
-
+  /* users before sessions on create (session rows carry the viewer FK), even
+     though deletions below remove sessions before users. */
   const v = list(data.users, previous?.users ?? [], (x) => x.id);
   for (const row of [...v.add, ...v.change]) {
     const rec = viewerRecord(row);
     ops.push((tx) => tx.viewer.upsert({ where: { id: row.id }, create: rec, update: rec }));
+  }
+
+  const s = list(data.userSessions, previous?.userSessions ?? [], (x) => x.tokenHash);
+  for (const row of [...s.add, ...s.change]) {
+    const rec = sessionRecord(row);
+    ops.push((tx) => tx.userSession.upsert({ where: { tokenHash: row.tokenHash }, create: rec, update: rec }));
   }
 
 

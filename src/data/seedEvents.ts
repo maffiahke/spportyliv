@@ -1,4 +1,4 @@
-import type { AdminUpcomingEvent, IptvSport } from '../types/iptv';
+import type { AdminUpcomingEvent, IptvSport } from '../types/iptv.js';
 
 interface SeedFixture {
   slot: 'upcoming' | 'scheduled';

@@ -3,7 +3,7 @@ import {
   sendNotification,
   setVapidDetails,
 } from 'web-push';
-import { loadStore, makeId, saveStore, PushPrefs } from './store';
+import { loadStore, makeId, saveStore, PushPrefs } from './store.js';
 
 /**
  * Admin web-push delivery.

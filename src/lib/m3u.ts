@@ -1,4 +1,4 @@
-import { StreamHeaders } from '../types/iptv';
+import { StreamHeaders } from '../types/iptv.js';
 
 /**
  * Full-featured M3U / M3U8 playlist parser for IPTV.
