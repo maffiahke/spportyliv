@@ -349,17 +349,6 @@ export default function App() {
             );
           })}
         </nav>
-
-        {/* Status footer */}
-        <div className="mt-auto rounded-2xl bg-[#EEF4FF] border border-white/85 shadow-[4px_4px_10px_rgba(163,189,226,0.4),-4px_-4px_10px_rgba(255,255,255,0.9)] px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[#EF4444] animate-pulse" aria-hidden="true" />
-            <span className="font-display font-bold text-[11px] text-slate-900">Streams online</span>
-          </div>
-          <p className="mt-1 text-[10px] text-slate-500 leading-snug">
-            Auto-syncing IPTV playlists every 5 minutes
-          </p>
-        </div>
       </aside>
 
       {/* Top App Header */}
@@ -751,39 +740,28 @@ export default function App() {
                   {/* In-feed unit: after the Live Now row, before Upcoming */}
                   <AdSlot placement="home-infeed" ads={ads} />
 
-                  {/* Upcoming (kickoff within 4 hours) — live-card design */}
-                  <section aria-label="Upcoming matches" className="space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2.5">
-                        <span className="neu-surface-sm w-8 h-8 rounded-full flex items-center justify-center text-[#1D6BFF] shrink-0">
-                          <Calendar className="w-4 h-4 stroke-[2.3]" />
-                        </span>
-                        <div>
-                          <h2 className="font-display font-extrabold text-[20px] sm:text-[22px] text-slate-950 tracking-tight">
-                            Upcoming
-                          </h2>
-                          <p className="text-[11px] font-medium text-slate-500">
-                            Kickoff within 4 hours
-                          </p>
+                  {/* Upcoming (kickoff within 4 hours) — hidden when there is nothing to show */}
+                  {visibleUpcomingMatches.length > 0 && (
+                    <section aria-label="Upcoming matches" className="space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <span className="neu-surface-sm w-8 h-8 rounded-full flex items-center justify-center text-[#1D6BFF] shrink-0">
+                            <Calendar className="w-4 h-4 stroke-[2.3]" />
+                          </span>
+                          <div>
+                            <h2 className="font-display font-extrabold text-[20px] sm:text-[22px] text-slate-950 tracking-tight">
+                              Upcoming
+                            </h2>
+                            <p className="text-[11px] font-medium text-slate-500">
+                              Kickoff within 4 hours
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      {visibleUpcomingMatches.length > 0 && (
                         <span className="neu-inset-sm inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-display font-bold text-[#1D6BFF] whitespace-nowrap">
                           {visibleUpcomingMatches.length} soon
                         </span>
-                      )}
-                    </div>
-
-                    {visibleUpcomingMatches.length === 0 ? (
-                      <div className="neu-surface rounded-[24px] p-6 text-center">
-                        <p className="font-display font-bold text-sm text-slate-900">
-                          No matches kick off in the next 4 hours
-                        </p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          Fixtures 5+ hours away are listed under Scheduled.
-                        </p>
                       </div>
-                    ) : (
+
                       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                         {visibleUpcomingMatches.map((match) => (
                           <LiveMatchCard
@@ -796,8 +774,8 @@ export default function App() {
                           />
                         ))}
                       </div>
-                    )}
-                  </section>
+                    </section>
+                  )}
                   </div>
 
                   {/* Scheduled Events Column (5+ hours to kickoff) */}
