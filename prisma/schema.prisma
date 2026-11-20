@@ -1,0 +1,168 @@
+// Neon (serverless Postgres) data layer for SportyLive.
+// The whole admin-managed store lives in these tables; the server keeps an
+// in-memory cache and writes a diffed snapshot inside one transaction.
+
+generator client {
+  provider      = "prisma-client-js"
+  // "native" for local dev; the rhel target is what Vercel's Node runtime needs.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Single-row cursor: bumped on every committed snapshot so clients (and
+/// other server instances) can detect changes cheaply.
+model StoreMeta {
+  id        Int      @id @default(1)
+  revision  Int      @default(0)
+  updatedAt DateTime @updatedAt @default(now())
+
+  @@map("store_meta")
+}
+
+model Playlist {
+  id             String   @id
+  name           String
+  sourceUrl      String?  @map("source_url")
+  sourceContent  String?  @map("source_content")
+  channelCount   Int      @default(0) @map("channel_count")
+  importedAt     String   @default("") @map("imported_at")
+  lastRefreshedAt String? @map("last_refreshed_at")
+  autoSync       Boolean? @map("auto_sync")
+  enabled        Boolean?
+  lastSyncedAt   String?  @map("last_synced_at")
+  lastError      String?  @map("last_error")
+
+  channels Channel[]
+
+  @@map("playlists")
+}
+
+model Channel {
+  id         String  @id
+  playlistId String  @map("playlist_id")
+  name       String
+  group      String?
+  tvgId      String? @map("tvg_id")
+  tvgLogo    String? @map("tvg_logo")
+  url        String
+  headers    Json    @default("{}")
+  sport      String  @default("other")
+  shelf      String  @default("recent")
+  quality    String  @default("HD")
+  enabled    Boolean @default(true)
+
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@index([playlistId])
+  @@map("channels")
+}
+
+model LiveEvent {
+  id          String  @id
+  homeTeam    String  @map("home_team")
+  awayTeam    String  @map("away_team")
+  sport       String
+  league      String
+  venue       String  @default("")
+  homeScore   Int     @default(0) @map("home_score")
+  awayScore   Int     @default(0) @map("away_score")
+  statusLabel String? @map("status_label")
+  viewers     String?
+  quality     String  @default("HD")
+  streamUrl   String  @default("") @map("stream_url")
+  headers     Json    @default("{}")
+  homeLogoUrl String? @map("home_logo_url")
+  awayLogoUrl String? @map("away_logo_url")
+  channelId   String? @map("channel_id")
+  status      String?
+  dateKey     String? @map("date_key")
+  time        String?
+  enabled     Boolean @default(true)
+
+  @@map("live_events")
+}
+
+model UpcomingEvent {
+  id        String  @id
+  homeTeam  String  @map("home_team")
+  awayTeam  String  @map("away_team")
+  sport     String
+  league    String
+  channel   String  @default("")
+  dateKey   String  @default("") @map("date_key")
+  time      String  @default("")
+  streamUrl String? @map("stream_url")
+  headers   Json    @default("{}")
+  status    String?
+  enabled   Boolean @default(true)
+
+  @@map("upcoming_events")
+}
+
+model Banner {
+  id                String  @id
+  sport             String
+  headlineTop       String  @default("") @map("headline_top")
+  headlineHighlight String  @default("") @map("headline_highlight")
+  headlineBottom    String  @default("") @map("headline_bottom")
+  subtitleLine1     String  @default("") @map("subtitle_line_1")
+  subtitleLine2     String  @default("") @map("subtitle_line_2")
+  ctaLabel          String  @default("") @map("cta_label")
+  bgGradient        String  @default("") @map("bg_gradient")
+  imageUrl          String? @map("image_url")
+  targetEventId     String? @map("target_event_id")
+  enabled           Boolean @default(true)
+
+  @@map("banners")
+}
+
+/// Free-form singleton documents (site settings, push prefs, VAPID keys).
+model SettingDoc {
+  key   String @id
+  value Json
+
+  @@map("settings")
+}
+
+/// A registered viewer account. Password is stored as a scrypt hash.
+model Viewer {
+  id            String @id
+  username      String
+  usernameLower String @unique @map("username_lower")
+  country       String @default("")
+  passwordHash  String @map("password_hash")
+  passwordSalt  String @map("password_salt")
+  createdAt     String @map("created_at")
+
+  sessions UserSession[]
+
+  @@map("viewers")
+}
+
+/// Only a hash of the bearer token is persisted.
+model UserSession {
+  tokenHash String @id @map("token_hash")
+  userId    String @map("user_id")
+  createdAt String @map("created_at")
+  expiresAt String @map("expires_at")
+
+  viewer Viewer @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_sessions")
+}
+
+model PushSubscription {
+  id        String  @id
+  endpoint  String
+  p256dh    String
+  auth      String
+  createdAt String  @map("created_at")
+  userAgent String? @map("user_agent")
+
+  @@map("push_subscriptions")
+}

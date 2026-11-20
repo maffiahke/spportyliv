@@ -1,0 +1,6 @@
+# Never uploaded to Vercel: local data, build output, and the Android wrapper.
+server/data/
+dist/
+android-app/
+.gemini/
+*.log

@@ -1,0 +1,6 @@
+{
+  "name": "SportyLive",
+  "description": "Live sports streaming and channels for football, basketball, tennis, boxing, and Formula 1.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

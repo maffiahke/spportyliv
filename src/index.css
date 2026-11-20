@@ -1,0 +1,376 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #EAF2FF;
+    background-image: linear-gradient(180deg, #EDF4FF 0%, #E7F0FF 55%, #ECF3FF 100%);
+    color: #0F172A;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display);
+  }
+}
+
+/* Unified Light Neumorphism Surface Tokens */
+@layer components {
+  .neu-surface {
+    background-color: #EEF4FF;
+    border: 1px solid rgba(255, 255, 255, 0.82);
+    box-shadow:
+      7px 7px 16px rgba(163, 189, 226, 0.5),
+      -7px -7px 16px rgba(255, 255, 255, 0.94);
+  }
+
+  .neu-surface-sm {
+    background-color: #EEF4FF;
+    border: 1px solid rgba(255, 255, 255, 0.84);
+    box-shadow:
+      4px 4px 10px rgba(163, 189, 226, 0.45),
+      -4px -4px 10px rgba(255, 255, 255, 0.94);
+  }
+
+  .neu-inset {
+    background-color: #E6EFFD;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    box-shadow:
+      inset 4px 4px 9px rgba(163, 189, 226, 0.52),
+      inset -4px -4px 9px rgba(255, 255, 255, 0.94);
+  }
+
+  .neu-inset-sm {
+    background-color: #E6EFFD;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    box-shadow:
+      inset 2.5px 2.5px 6px rgba(163, 189, 226, 0.48),
+      inset -2.5px -2.5px 6px rgba(255, 255, 255, 0.92);
+  }
+
+  .neu-pressable:active {
+    box-shadow:
+      inset 4px 4px 9px rgba(163, 189, 226, 0.5),
+      inset -4px -4px 9px rgba(255, 255, 255, 0.92);
+  }
+}
+
+/* Hide scrollbars cleanly for horizontal sport & channel strips */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* =========================================================================
+   Admin "Neon Prisma" — light neumorphic admin console
+   Same ice-blue neumorphism as the public app, with prismatic brand accents.
+   Scoped to .neon-* classes.
+   ========================================================================= */
+@layer components {
+  .neon-root {
+    background:
+      radial-gradient(640px 320px at 92% -8%, rgba(124, 58, 237, 0.08), transparent 60%),
+      radial-gradient(520px 300px at -6% 18%, rgba(29, 107, 255, 0.07), transparent 55%),
+      radial-gradient(560px 340px at 60% 112%, rgba(236, 72, 153, 0.06), transparent 60%),
+      linear-gradient(170deg, #F1F6FF 0%, #E9F1FF 55%, #EEF4FF 100%);
+    color: #0F172A;
+  }
+
+  .neon-card {
+    position: relative;
+    background: #EEF4FF;
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    border-radius: 20px;
+    box-shadow:
+      7px 7px 16px rgba(163, 189, 226, 0.48),
+      -7px -7px 16px rgba(255, 255, 255, 0.95);
+  }
+
+  .neon-card-accent::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 21px;
+    padding: 1px;
+    background: linear-gradient(120deg, rgba(29, 107, 255, 0.55), rgba(124, 58, 237, 0.45), rgba(236, 72, 153, 0.5));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .neon-tab {
+    border: 1px solid transparent;
+    border-radius: 9999px;
+    transition: all 0.18s ease;
+  }
+  .neon-tab:hover {
+    color: #1D6BFF;
+    background: rgba(255, 255, 255, 0.85);
+    box-shadow: 4px 4px 10px rgba(163, 189, 226, 0.42), -4px -4px 10px rgba(255, 255, 255, 0.92);
+  }
+  .neon-tab-active,
+  .neon-tab-active:hover {
+    color: #1D6BFF;
+    background: #E5EEFD;
+    border-color: rgba(255, 255, 255, 0.9);
+    box-shadow:
+      inset 3px 3px 7px rgba(163, 189, 226, 0.48),
+      inset -3px -3px 7px rgba(255, 255, 255, 0.95);
+  }
+
+  .neon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    border-radius: 9999px;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(120deg, #1D6BFF 0%, #5B54E8 55%, #A855F7 100%);
+    box-shadow:
+      4px 4px 12px rgba(29, 107, 255, 0.35),
+      -3px -3px 10px rgba(255, 255, 255, 0.85);
+    transition: all 0.18s ease;
+  }
+  .neon-btn:hover {
+    filter: brightness(1.06);
+    box-shadow:
+      5px 5px 16px rgba(29, 107, 255, 0.42),
+      -4px -4px 12px rgba(255, 255, 255, 0.9);
+  }
+  .neon-btn:active {
+    box-shadow: inset 3px 3px 7px rgba(29, 107, 255, 0.4), inset -3px -3px 7px rgba(255, 255, 255, 0.5);
+    transform: translateY(1px);
+  }
+  .neon-btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    border-radius: 9999px;
+    font-weight: 700;
+    color: #334155;
+    background: #EEF4FF;
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 4px 4px 10px rgba(163, 189, 226, 0.45), -4px -4px 10px rgba(255, 255, 255, 0.95);
+    transition: all 0.18s ease;
+  }
+  .neon-btn-ghost:hover {
+    color: #1D6BFF;
+  }
+  .neon-btn-ghost:active {
+    box-shadow: inset 3px 3px 6px rgba(163, 189, 226, 0.45), inset -3px -3px 6px rgba(255, 255, 255, 0.9);
+  }
+  .neon-btn-danger {
+    color: #E11D48;
+    background: #FEF0F3;
+    border-color: #FECDD8;
+    box-shadow: 4px 4px 10px rgba(244, 63, 94, 0.18), -4px -4px 10px rgba(255, 255, 255, 0.9);
+  }
+  .neon-btn-danger:hover {
+    color: #BE123C;
+    background: #FDE7EC;
+  }
+  .neon-btn-accent {
+    color: #FFFFFF;
+    background: linear-gradient(135deg, #1D6BFF 0%, #2563EB 100%);
+    border-color: rgba(255, 255, 255, 0.35);
+    box-shadow: 4px 4px 12px rgba(29, 107, 255, 0.35), -3px -3px 10px rgba(255, 255, 255, 0.7);
+  }
+  .neon-btn-accent:hover {
+    color: #FFFFFF;
+  }
+
+  .neon-input {
+    width: 100%;
+    background: #E5EEFD;
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    border-radius: 12px;
+    color: #0F172A;
+    font-size: 13px;
+    padding: 0.55rem 0.8rem;
+    outline: none;
+    box-shadow:
+      inset 2.5px 2.5px 6px rgba(163, 189, 226, 0.5),
+      inset -2.5px -2.5px 6px rgba(255, 255, 255, 0.95);
+    transition: box-shadow 0.15s ease;
+  }
+  .neon-input::placeholder {
+    color: #94A3B8;
+  }
+  .neon-input:focus {
+    box-shadow:
+      inset 2.5px 2.5px 6px rgba(163, 189, 226, 0.5),
+      inset -2.5px -2.5px 6px rgba(255, 255, 255, 0.95),
+      0 0 0 3px rgba(29, 107, 255, 0.18);
+  }
+  select.neon-input option {
+    background: #F4F8FF;
+    color: #0F172A;
+  }
+
+  .neon-label {
+    display: block;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #64748B;
+    margin-bottom: 0.3rem;
+  }
+
+  .neon-prisma-text {
+    background: linear-gradient(100deg, #1D6BFF 0%, #7C3AED 55%, #EC4899 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .neon-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 9999px;
+    padding: 0.15rem 0.55rem;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    border: 1px solid rgba(255, 255, 255, 0.95);
+    color: #475569;
+    background: #E5EEFD;
+    box-shadow: 2px 2px 6px rgba(163, 189, 226, 0.4), -2px -2px 6px rgba(255, 255, 255, 0.9);
+  }
+  .neon-badge-live {
+    color: #E11D48;
+    background: #FDECEF;
+    border-color: #FECDD8;
+  }
+
+  .neon-toggle {
+    position: relative;
+    width: 42px;
+    height: 22px;
+    border-radius: 9999px;
+    background: #E5EEFD;
+    border: 1px solid rgba(255, 255, 255, 0.95);
+    box-shadow: inset 2px 2px 5px rgba(163, 189, 226, 0.5), inset -2px -2px 5px rgba(255, 255, 255, 0.95);
+    transition: all 0.18s ease;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .neon-toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 9999px;
+    background: #94A3B8;
+    box-shadow: 1px 1px 3px rgba(100, 116, 139, 0.4);
+    transition: all 0.18s ease;
+  }
+  .neon-toggle-on {
+    background: linear-gradient(120deg, #1D6BFF, #7C3AED);
+    border-color: rgba(255, 255, 255, 0.9);
+    box-shadow: 3px 3px 9px rgba(29, 107, 255, 0.4), -3px -3px 9px rgba(255, 255, 255, 0.9);
+  }
+  .neon-toggle-on::after {
+    left: 22px;
+    background: #fff;
+  }
+
+  .neon-row {
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    border-radius: 16px;
+    background: #EEF4FF;
+    box-shadow: 5px 5px 12px rgba(163, 189, 226, 0.42), -5px -5px 12px rgba(255, 255, 255, 0.92);
+    transition: box-shadow 0.15s ease;
+  }
+  .neon-row:hover {
+    box-shadow: 6px 6px 15px rgba(163, 189, 226, 0.5), -6px -6px 15px rgba(255, 255, 255, 0.98);
+  }
+
+  .neon-toast {
+    background: linear-gradient(120deg, #1D6BFF, #5B54E8);
+    color: #fff;
+    border-radius: 9999px;
+    box-shadow: 0 10px 26px rgba(29, 107, 255, 0.4);
+  }
+
+  .neon-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .neon-scroll::-webkit-scrollbar-thumb {
+    background: rgba(29, 107, 255, 0.35);
+    border-radius: 9999px;
+  }
+  .neon-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* --- Ads: reserved space keeps CLS at zero and matches the neon surface --- */
+.ad-slot {
+  position: relative;
+  width: 100%;
+  min-height: var(--ad-h-mobile, 100px);
+  border-radius: 18px;
+  background: #EEF4FF;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: inset 3px 3px 8px rgba(163, 189, 226, 0.35), inset -3px -3px 8px rgba(255, 255, 255, 0.9);
+  padding: 0.5rem 0.6rem 0.6rem;
+  contain: layout paint;
+}
+
+@media (min-width: 768px) {
+  .ad-slot {
+    min-height: var(--ad-h-desktop, 90px);
+  }
+}
+
+@media (max-width: 1023px) {
+  .ad-slot-desktop-only {
+    display: none;
+  }
+}
+
+.ad-slot-label {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #7C8DB5;
+  margin-bottom: 0.25rem;
+}
+
+.ad-slot-placeholder {
+  min-height: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  border: 1px dashed rgba(29, 107, 255, 0.35);
+  border-radius: 12px;
+  padding: 0.5rem;
+  text-align: center;
+}
+
+.ad-slot-placeholder-hint {
+  font-size: 10px;
+  color: #64748B;
+}
