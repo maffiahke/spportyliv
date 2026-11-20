@@ -20,12 +20,14 @@ the new revision over SSE and refetches.
 
 1. **Create the Neon project** (https://console.neon.tech) and copy the
    **pooled** connection string (Host starts with `ep-…-pooler`).
-   Append `?sslmode=require&pgbouncer=true&connection_limit=1`.
+   Append `?sslmode=require&pgbouncer=true&connection_limit=5`. The admin
+   console authenticates from `ADMIN_USER`/`ADMIN_PASS`; it is **not** a row in
+   Postgres, so an empty `viewers` table does not affect admin access.
 
 2. **Local `.env`**:
 
    ```
-   DATABASE_URL="postgresql://USER:PASSWORD@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require&pgbouncer=true&connection_limit=1"
+   DATABASE_URL="postgresql://USER:PASSWORD@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require&pgbouncer=true&connection_limit=5"
    ADMIN_USER="admin"
    ADMIN_PASS="change-me"
    ```
@@ -58,12 +60,27 @@ Build settings come from `vercel.json`: build command
 API refuses to start on Vercel without `DATABASE_URL`** rather than silently
 dropping writes.
 
+## Admin login
+
+The admin console is **not** backed by a database table. `POST /api/admin/login`
+compares the submitted credentials with `ADMIN_USER` / `ADMIN_PASS` (defaults
+`admin` / `sportylive`) and returns an HMAC-signed bearer token (24h), so any
+lambda instance can validate it without shared memory.
+
+* There is no "admin user" to seed; set the two env vars on Vercel and redeploy.
+* Viewer accounts (`viewers` table) are separate and unrelated to admin access.
+* Set `ADMIN_SESSION_SECRET` to a random string for production; when omitted the
+  token key is derived from the admin credentials, so changing the password
+  invalidates existing sessions.
+* Pool errors in the login response (`Timed out fetching a new connection from
+  the connection pool`) mean `DATABASE_URL` is wrong or `connection_limit` is
+  too low for the startup snapshot queries — use `connection_limit=5`.
+
 ## Cron
 
-`vercel.json` schedules `/api/cron/playlist-sync` every 5 minutes. Vercel Hobby
-only allows daily crons — loosen the schedule to `0 0 * * *` on Hobby, or move
-the project to Pro for 5-minute sync. The route is idempotent and safe to call
-manually:
+`vercel.json` schedules `/api/cron/playlist-sync` once a day (`0 0 * * *`),
+which is what Vercel Hobby allows. On Pro, switch the schedule to `*/5 * * * *`
+for 5-minute auto-sync. The route is idempotent and safe to call manually:
 
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" https://your-app.vercel.app/api/cron/playlist-sync

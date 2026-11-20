@@ -22,5 +22,5 @@
       "headers": [{ "key": "cache-control", "value": "no-store" }]
     }
   ],
-  "crons": [{ "path": "/api/cron/playlist-sync", "schedule": "*/5 * * * *" }]
+  "crons": [{ "path": "/api/cron/playlist-sync", "schedule": "0 0 * * *" }]
 }

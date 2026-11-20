@@ -1,7 +1,7 @@
 import {
   createHash,
+  createHmac,
   randomBytes,
-  randomUUID,
   scryptSync,
   timingSafeEqual as nodeTimingSafeEqual,
 } from 'crypto';
@@ -467,32 +467,33 @@ function sendJson(res: import('http').ServerResponse, status: number, body: unkn
   res.end(JSON.stringify(body));
 }
 
-/* ---------------- Admin auth (session tokens, in-memory) ---------------- */
+/* ---------------- Admin auth (stateless HMAC session tokens) ---------------- */
 
 const ADMIN_USER = process.env.ADMIN_USER ?? 'admin';
 const ADMIN_PASS = process.env.ADMIN_PASS ?? 'sportylive';
-const adminSessions = new Set<string>();
+// A stable signing key lets any serverless instance validate a token without
+// shared memory. Rotating ADMIN_PASS (or this secret) invalidates old sessions.
+const ADMIN_SESSION_SECRET =
+  process.env.ADMIN_SESSION_SECRET || `sportylive:${ADMIN_USER}:${ADMIN_PASS}`;
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
-const sessionExpiry = new Map<string, number>();
+
+function adminTokenSignature(payload: string): string {
+  return createHmac('sha256', ADMIN_SESSION_SECRET).update(payload).digest('base64url');
+}
 
 function issueToken(): string {
-  const token = randomUUID().replace(/-/g, '') + randomBytes(12).toString('hex');
-  adminSessions.add(token);
-  sessionExpiry.set(token, Date.now() + SESSION_TTL_MS);
-  return token;
+  const payload = String(Date.now() + SESSION_TTL_MS);
+  return `${payload}.${adminTokenSignature(payload)}`;
 }
 
 function isAuthed(req: import('http').IncomingMessage): boolean {
   const auth = req.headers.authorization ?? '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-  if (!adminSessions.has(token)) return false;
-  const exp = sessionExpiry.get(token) ?? 0;
-  if (Date.now() > exp) {
-    adminSessions.delete(token);
-    sessionExpiry.delete(token);
-    return false;
-  }
-  return true;
+  const [payload, signature] = token.split('.');
+  if (!payload || !signature) return false;
+  const exp = Number(payload);
+  if (!Number.isFinite(exp) || Date.now() > exp) return false;
+  return timingSafeEqual(signature, adminTokenSignature(payload));
 }
 
 function timingSafeEqual(a: string, b: string): boolean {
