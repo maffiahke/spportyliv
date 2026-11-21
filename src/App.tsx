@@ -147,6 +147,58 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, []);
 
+  // ---- Device/browser back navigation ----
+  // Every app screen (tab, player) is mirrored into a history entry, so the
+  // device back button steps through the site instead of leaving it. The
+  // sync effect pushes entries when the UI changes on its own, and the
+  // popstate handler restores UI state when the user presses back.
+  const suppressHistorySyncRef = useRef(false);
+  const lastHistoryKeyRef = useRef('');
+
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const st = (e.state ?? { app: 'root', tab: 'home' }) as { app?: string; tab?: NavTab };
+      suppressHistorySyncRef.current = true;
+      setActiveTab(st.tab ?? 'home');
+      if (st.app !== 'player') {
+        // Leaving the player screen: stop playback — unless the user is in a
+        // self-opened PiP, which keeps playing while they browse.
+        setActiveStream((prev) => (prev && prev.isPip ? prev : null));
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const playerActive = activeStream !== null;
+    const key = `${activeTab}|${playerActive ? 'p' : 't'}`;
+    if (suppressHistorySyncRef.current) {
+      suppressHistorySyncRef.current = false;
+      lastHistoryKeyRef.current = key;
+      return;
+    }
+    if (key === lastHistoryKeyRef.current) return;
+    const state = playerActive ? { app: 'player' } : { app: 'tab', tab: activeTab };
+    try {
+      const current = window.history.state as { app?: string } | null;
+      if (current?.app === 'player' && !playerActive) {
+        // The player is being exited — replace its entry so device back does
+        // not land on a dead player screen.
+        window.history.replaceState(state, '');
+      } else if (lastHistoryKeyRef.current === '') {
+        // First sync on mount — claim the initial entry.
+        window.history.replaceState(state, '');
+      } else {
+        window.history.pushState(state, '');
+      }
+      lastHistoryKeyRef.current = key;
+    } catch {
+      /* history unavailable — the app still works, back just exits */
+    }
+  }, [activeTab, activeStream]);
+
   // AdSense placements are part of the server settings, so toggling them in the
   // admin console takes effect on every open tab without a redeploy.
   const ads = content.settings?.ads;
