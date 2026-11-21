@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Bell, BellRing, Check, Clock, Copy, Eye, ExternalLink, Play, Share2, X } from 'lucide-react';
 import { LiveMatch } from '../types/sports';
+import { eventShareUrl } from '../lib/share';
 import { TeamCrest } from './IconsAndCrests';
 
 interface LiveMatchCardProps {
@@ -109,11 +110,9 @@ export const LiveMatchCard: React.FC<LiveMatchCardProps> = ({
   }, [shareMenuOpen]);
 
   const buildSharePayload = () => {
-    const baseUrl =
-      typeof window !== 'undefined'
-        ? `${window.location.origin}${window.location.pathname}`
-        : '';
-    const url = `${baseUrl}?match=${encodeURIComponent(match.id)}`;
+    // Deep link: /event/<id> carries the OG thumbnail and redirects into the
+    // app's player for this event.
+    const url = eventShareUrl(match.id);
     const title = `${match.homeTeam} vs ${match.awayTeam} — ${
       isUpcoming ? 'Upcoming' : 'Live'
     } on SportyLive`;

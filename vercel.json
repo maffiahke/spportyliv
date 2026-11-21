@@ -11,6 +11,7 @@
   },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/event/(.*)", "destination": "/api/index" },
     { "source": "/ads.txt", "destination": "/api/index" },
     { "source": "/admin", "destination": "/admin.html" },
     { "source": "/admin/(.*)", "destination": "/admin.html" },

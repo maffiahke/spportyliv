@@ -963,6 +963,71 @@ export async function handleApiRequest(
     return true;
   }
 
+  // ---------------- Public: event share page (OG preview + redirect) -------
+  // Shares point here: social crawlers read the Open Graph tags (event teams
+  // + logo as the thumbnail) while people are redirected straight into the
+  // app's player via /?watch=<id>.
+  const evShare = path.match(/^\/event\/([^/]+)$/);
+  if (evShare && method === 'GET') {
+    const store = loadStore();
+    const id = decodeURIComponent(evShare[1]);
+    const live = store.liveEvents.find((e) => e.id === id);
+    const upc = store.upcomingEvents.find((e) => e.id === id);
+    const ev = live ?? upc;
+    const isLive = Boolean(live);
+    const host = String(req.headers.host ?? 'sporty-live.vercel.app').split(/[,\s]/)[0];
+    const origin = host.startsWith('localhost') || host.startsWith('127.') ? `http://${host}` : `https://${host}`;
+    const appUrl = `${origin}/?watch=${encodeURIComponent(id)}`;
+
+    let title = 'SportyLive — Live Sports Streaming and Channels';
+    let description = 'Live sports streaming and channels for football, basketball, tennis, boxing, and Formula 1.';
+    let image = `${origin}/icon-512.png`;
+    if (ev) {
+      const names = `${ev.homeTeam} vs ${ev.awayTeam}`;
+      const league = ev.league ? `${ev.league} — ` : '';
+      title = isLive ? `LIVE NOW — ${names} | SportyLive` : `Upcoming — ${names} | SportyLive`;
+      description = isLive
+        ? `${league}Watch ${names} live on SportyLive.`
+        : `${league}${names} kicks off soon — watch it on SportyLive.`;
+      const logo =
+        ('homeLogoUrl' in ev && ev.homeLogoUrl) ||
+        ('awayLogoUrl' in ev && ev.awayLogoUrl) ||
+        ('leagueLogo' in ev && (ev as AdminUpcomingEvent).leagueLogo) ||
+        undefined;
+      if (logo) image = logo.startsWith('http') ? logo : `${origin}${logo}`;
+    }
+
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>${esc(title)}</title>
+<meta name="description" content="${esc(description)}" />
+<meta property="og:title" content="${esc(title)}" />
+<meta property="og:description" content="${esc(description)}" />
+<meta property="og:image" content="${esc(image)}" />
+<meta property="og:url" content="${esc(appUrl)}" />
+<meta property="og:type" content="video.other" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="${esc(title)}" />
+<meta name="twitter:description" content="${esc(description)}" />
+<meta name="twitter:image" content="${esc(image)}" />
+<meta http-equiv="refresh" content="0;url=${esc(appUrl)}" />
+<script>location.replace(${JSON.stringify(appUrl)});</script>
+</head>
+<body>
+<p style="font-family:system-ui;padding:24px">Opening SportyLive… <a href="${esc(appUrl)}">Open here</a> if nothing happens.</p>
+</body>
+</html>`;
+    res.writeHead(200, {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'public, max-age=120',
+    });
+    res.end(html);
+    return true;
+  }
+
   if (!path.startsWith('/api')) return false;
 
   // The Neon-backed store loads once per process (first request pays the round

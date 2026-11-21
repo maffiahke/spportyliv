@@ -1,12 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { isHlsPlaybackUrl } from '../lib/proxy';
+import { buildEventSharePayload } from '../lib/share';
+import { copyTextToClipboard } from '../lib/clipboard';
 import {
   ArrowLeft,
+  Check,
+  Link2,
   Maximize2,
   Pause,
   PictureInPicture2,
   Play,
   RefreshCw,
+  Share2,
   Tv,
   Volume2,
   VolumeX,
@@ -81,6 +86,63 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
   const [hlsLevels, setHlsLevels] = useState<HlsLevel[]>([]);
   const [selectedQuality, setSelectedQuality] = useState<string | null>(null);
   const [activeLevel, setActiveLevel] = useState(-1);
+
+  // Share: link to this event (with OG thumbnail via /event/<id>).
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const shareContainerRef = useRef<HTMLDivElement>(null);
+  const isUpcomingMatch = Boolean(match.isUpcoming);
+
+  useEffect(() => {
+    if (!shareMenuOpen) return;
+    const handleOutside = (e: PointerEvent) => {
+      if (shareContainerRef.current && !shareContainerRef.current.contains(e.target as Node)) {
+        setShareMenuOpen(false);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShareMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', handleOutside);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [shareMenuOpen]);
+
+  const sharePayload = useMemo(
+    () => buildEventSharePayload(match, isUpcomingMatch),
+    [match.homeTeam, match.awayTeam, match.league, match.kickoffLabel, match.id, isUpcomingMatch],
+  );
+
+  const handleShareClick = async () => {
+    if (shareMenuOpen) {
+      setShareMenuOpen(false);
+      return;
+    }
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        await navigator.share({
+          title: sharePayload.title,
+          text: sharePayload.text,
+          url: sharePayload.url,
+        });
+        return;
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
+        // Web Share unavailable/blocked — fall through to the quick menu.
+      }
+    }
+    setShareMenuOpen(true);
+  };
+
+  const handleCopyLink = async () => {
+    const ok = await copyTextToClipboard(sharePayload.url);
+    setCopied(ok);
+    window.setTimeout(() => setCopied(false), 2000);
+    setShareMenuOpen(false);
+  };
 
   // Multi-stream failover: admin events can carry several sources. The active
   // one plays; when it fails, the player auto-advances to the next stream.
@@ -419,7 +481,7 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
   return (
     <div className="space-y-5 pb-6 max-w-4xl mx-auto">
       {/* Match Title & Back Header */}
-      <div className="neu-surface rounded-[22px] px-3.5 py-3 sm:px-4 sm:py-3.5 flex items-center gap-3">
+      <div ref={shareContainerRef} className="neu-surface rounded-[22px] px-3.5 py-3 sm:px-4 sm:py-3.5 flex items-center gap-3 relative">
         <button
           type="button"
           onClick={onBack}
@@ -441,6 +503,70 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
             {subtitle}
           </p>
         </div>
+
+        <button
+          type="button"
+          onClick={() => void handleShareClick()}
+          aria-label="Share this event"
+          aria-expanded={shareMenuOpen}
+          title="Share event"
+          className="neu-surface-sm neu-pressable w-10 h-10 rounded-full flex items-center justify-center text-slate-800 hover:text-[#1D6BFF] transition-colors cursor-pointer shrink-0"
+        >
+          <Share2 className="w-4 h-4" />
+        </button>
+
+        {/* Share popover — link carries the event's thumbnail via /event/<id> */}
+        {shareMenuOpen && (
+          <div
+            role="dialog"
+            aria-label="Share event"
+            className="neu-surface absolute right-3 top-[68px] z-40 w-56 rounded-[18px] p-2 shadow-[0_14px_30px_rgba(15,43,115,0.22)] space-y-0.5"
+          >
+            <div className="flex items-center justify-between px-2 py-1">
+              <span className="font-display font-bold text-[11px] text-slate-500 truncate">Share Event</span>
+              <button
+                type="button"
+                onClick={() => setShareMenuOpen(false)}
+                aria-label="Close share menu"
+                className="w-5 h-5 rounded-full hover:bg-white/70 flex items-center justify-center text-slate-500 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleCopyLink()}
+              className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[11.5px] font-display font-semibold text-slate-700 hover:bg-white/70 hover:text-[#1D6BFF] transition-colors cursor-pointer"
+            >
+              {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Link2 className="w-4 h-4" />}
+              {copied ? 'Link copied!' : 'Copy event link'}
+            </button>
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(`${sharePayload.text} ${sharePayload.url}`)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[11.5px] font-display font-semibold text-slate-700 hover:bg-white/70 hover:text-[#1D6BFF] transition-colors"
+            >
+              WhatsApp
+            </a>
+            <a
+              href={`https://t.me/share/url?url=${encodeURIComponent(sharePayload.url)}&text=${encodeURIComponent(sharePayload.text)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[11.5px] font-display font-semibold text-slate-700 hover:bg-white/70 hover:text-[#1D6BFF] transition-colors"
+            >
+              Telegram
+            </a>
+            <a
+              href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(sharePayload.text)}&url=${encodeURIComponent(sharePayload.url)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[11.5px] font-display font-semibold text-slate-700 hover:bg-white/70 hover:text-[#1D6BFF] transition-colors"
+            >
+              X (Twitter)
+            </a>
+          </div>
+        )}
 
         <button
           type="button"
