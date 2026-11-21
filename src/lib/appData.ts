@@ -431,7 +431,7 @@ export function mergeAppContent(data: AppData): MergedAppContent {
         subtitleLine1: b.subtitleLine1,
         subtitleLine2: b.subtitleLine2,
         ctaLabel: b.ctaLabel,
-        matchId: targetEvent ? `iptv-ev-${targetEvent.id}` : adminLiveMatches[0]?.id,
+        matchId: targetEvent ? `iptv-ev-${targetEvent.id}` : undefined,
         bgGradient: b.bgGradient,
         imageUrl: b.imageUrl?.trim() || undefined,
       };
