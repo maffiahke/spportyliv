@@ -8,7 +8,8 @@ import { AdSlot } from './ads/AdSlot';
 interface LiveTVViewProps {
   channels: TVChannel[];
   liveMatches: LiveMatch[];
-  onWatchMatch: (match: LiveMatch, channel?: TVChannel) => void;
+  /** Match may be undefined when no event is live — App falls back to the channel's own stream. */
+  onWatchMatch: (match: LiveMatch | undefined, channel?: TVChannel) => void;
   ads?: AdsSettings | null;
 }
 
@@ -67,11 +68,10 @@ export const LiveTVView: React.FC<LiveTVViewProps> = ({
   const popularShelfChannels = !expandedPopular && isDesktop ? popularChannels.slice(0, 12) : popularChannels;
 
   const handleTuneIn = (channel: TVChannel) => {
-    const match =
-      liveMatches.find((m) => m.id === channel.linkedMatchId) || liveMatches[0];
-    if (match) {
-      onWatchMatch(match, channel);
-    }
+    // Channels play their own stream; the match is only used for the event
+    // context when one is actually live.
+    const match = liveMatches.find((m) => m.id === channel.linkedMatchId) || liveMatches[0];
+    onWatchMatch(match, channel);
   };
 
   return (

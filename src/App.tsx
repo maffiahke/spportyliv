@@ -181,9 +181,40 @@ export default function App() {
     return ['global-leaderboard'];
   }, [activeTab, isFullPlayerOpen]);
 
-  const openPlayerScreen = (match: LiveMatch, channel?: TVChannel | null) => {
+  const openPlayerScreen = (match?: LiveMatch, channel?: TVChannel | null) => {
+    // A channel clicked with no live event plays its own stream — build a
+    // minimal stand-in match so the player shell has its context.
+    const effectiveMatch =
+      match ??
+      (channel
+        ? ({
+            id: `iptv-ch-live-${channel.id}`,
+            sport: channel.sport,
+            homeTeam: channel.name,
+            awayTeam: 'Live',
+            homeCrest: channel.name,
+            awayCrest: channel.name,
+            homeScore: 0,
+            awayScore: 0,
+            league: channel.currentShow || 'Live TV',
+            leagueCrest: channel.currentShow || 'Live TV',
+            elapsedSeconds: 0,
+            quality: channel.quality,
+            viewers: '—',
+            videoUrl: channel.streamUrl,
+            leftTheme: '#0A369D',
+            rightTheme: '#8E0E42',
+            venue: channel.currentShow || 'Live TV',
+            stats: [],
+            commentary: [],
+          } as LiveMatch)
+        : undefined);
+    if (!effectiveMatch) {
+      setToastMessage('Nothing to play yet');
+      return;
+    }
     setPlayerIsPlaying(true);
-    setActiveStream({ match, channel: channel ?? null, isPip: false });
+    setActiveStream({ match: effectiveMatch, channel: channel ?? null, isPip: false });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
