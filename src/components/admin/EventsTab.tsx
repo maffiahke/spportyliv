@@ -144,6 +144,16 @@ export const EventsTab: React.FC<EventsTabProps> = ({
   };
   const filterByDate = <T extends AdminLiveEvent | AdminUpcomingEvent>(events: T[]): T[] =>
     dateFilter ? events.filter((ev) => localDateKey(ev) === dateFilter) : events;
+
+  /** Kickoff in the admin's local timezone, from the stored UTC timestamp. */
+  const localKickoffLabel = (ev: AdminLiveEvent | AdminUpcomingEvent): string | null => {
+    if (!ev.startTimestampMs) return null;
+    const d = new Date(ev.startTimestampMs);
+    return `${d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}, ${d.toLocaleTimeString(
+      undefined,
+      { hour: '2-digit', minute: '2-digit' },
+    )}`;
+  };
   // Nearest kickoffs first (events with recent dates at the top).
   const byKickoff = <T extends AdminLiveEvent | AdminUpcomingEvent>(a: T, b: T): number =>
     (a.startTimestampMs ?? (Date.parse(a.dateKey ?? '') || Number.MAX_SAFE_INTEGER)) -
@@ -541,6 +551,15 @@ export const EventsTab: React.FC<EventsTabProps> = ({
               </NeonField>
               <NeonField label="Kickoff Time">
                 <NeonInput value={form.time} onChange={(e) => set('time', e.target.value)} placeholder="8:00 PM" />
+                {(() => {
+                  const editingEv =
+                    editingId &&
+                    (liveEvents.find((e) => e.id === editingId) ?? upcomingEvents.find((e) => e.id === editingId));
+                  const local = editingEv ? localKickoffLabel(editingEv) : null;
+                  return local ? (
+                    <p className="text-[10px] text-slate-500 mt-1">= {local} in your timezone</p>
+                  ) : null;
+                })()}
               </NeonField>
               <NeonField label="Status">
                 <NeonSelect value={form.status} onChange={(e) => set('status', e.target.value as AdminEventStatus)}>
@@ -750,7 +769,12 @@ export const EventsTab: React.FC<EventsTabProps> = ({
               </button>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="neon-badge">{ev.dateKey}</span>
+                  <span
+                    className="neon-badge"
+                    title={ev.startTimestampMs ? `Raw feed time: ${ev.dateKey} ${ev.time}` : undefined}
+                  >
+                    {localDateKey(ev)}
+                  </span>
                   <span className={statusBadgeClass(computeEventStatus(ev, ev.status ?? 'scheduled'))} title="Status is derived from the event time (live = within 2h of kickoff, ended = past it)">
                     {computeEventStatus(ev, ev.status ?? 'scheduled').toUpperCase()}
                   </span>
@@ -761,7 +785,11 @@ export const EventsTab: React.FC<EventsTabProps> = ({
                   {ev.streamUrl && <span className="neon-badge neon-badge-live">preview stream</span>}
                 </div>
                 <p className="mt-0.5 text-[10.5px] text-slate-500 truncate">
-                  {ev.time} · {ev.league} · {ev.channel}
+                  {(() => {
+                    const local = localKickoffLabel(ev);
+                    if (local) return `${local} (your time) · ${ev.league} · ${ev.channel}`;
+                    return `${ev.time} · ${ev.league} · ${ev.channel}`;
+                  })()}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
