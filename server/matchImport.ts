@@ -263,7 +263,7 @@ export function importMatchesIntoStore(
     if (live) {
       if (existingLive) {
         existingLive.streamUrl = primary?.url ?? existingLive.streamUrl ?? '';
-        existingLive.customStreams = streams;
+        existingLive.customStreams = []; // imports attach only the primary stream
         existingLive.league = league;
         existingLive.venue = m.venue ?? existingLive.venue;
         existingLive.homeLogoUrl = m.logo1 ?? existingLive.homeLogoUrl;
@@ -290,7 +290,6 @@ export function importMatchesIntoStore(
         awayScore: 0,
         quality: primary?.quality === '4K' ? '4K' : 'HD',
         streamUrl: primary?.url ?? '',
-        customStreams: streams,
         headers: headersFromStream(primary ?? {}),
         homeLogoUrl: m.logo1,
         awayLogoUrl: m.logo2,
@@ -309,7 +308,7 @@ export function importMatchesIntoStore(
     // Upcoming fixture.
     if (existingUpcoming) {
       existingUpcoming.streamUrl = primary?.url ?? existingUpcoming.streamUrl;
-      existingUpcoming.customStreams = streams;
+      existingUpcoming.customStreams = []; // imports attach only the primary stream
       existingUpcoming.league = league;
       existingUpcoming.channel = channelLabel;
       existingUpcoming.homeTeam = m.team1;
@@ -341,7 +340,6 @@ export function importMatchesIntoStore(
       dateKey,
       time,
       streamUrl: primary?.url,
-      customStreams: streams,
       headers: headersFromStream(primary ?? {}),
       status: 'upcoming',
       startTimestampMs: m.startTimestampMs,
