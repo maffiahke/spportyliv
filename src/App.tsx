@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bell,
   Calendar,
@@ -25,7 +25,7 @@ import {
   TVChannel,
   UpcomingEvent,
 } from './types/sports';
-import { DEFAULT_SITE_SETTINGS } from './types/iptv';
+import { AppData, DEFAULT_SITE_SETTINGS } from './types/iptv';
 import { fetchAppData } from './lib/api';
 import { subscribeStoreChanges } from './lib/realtime';
 import {
@@ -94,9 +94,11 @@ export default function App() {
 
   // Server-driven IPTV content (playlists → channels, events, banners).
   const [content, setContent] = useState(FALLBACK_CONTENT);
+  const rawDataRef = useRef<AppData | null>(null);
   const reloadContent = useCallback(async () => {
     try {
       const data = await fetchAppData();
+      rawDataRef.current = data;
       setContent(mergeAppContent(data));
     } catch {
       /* keep last known content */
@@ -106,6 +108,16 @@ export default function App() {
   useEffect(() => {
     void reloadContent();
   }, [reloadContent]);
+
+  // Time-derived statuses must advance while the page is open: re-merge the
+  // last fetched data periodically so a match flips UPCOMING → LIVE at kickoff
+  // (and out of the live window 2h later) without waiting for a refetch.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (rawDataRef.current) setContent(mergeAppContent(rawDataRef.current));
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // AdSense placements are part of the server settings, so toggling them in the
   // admin console takes effect on every open tab without a redeploy.
