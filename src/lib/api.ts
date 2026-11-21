@@ -350,6 +350,57 @@ export function fetchAdminUsers(): Promise<{ total: number; users: AdminUserReco
   );
 }
 
+export interface VisitorAnalyticsSummary {
+  onlineNow: number;
+  today: number;
+  yesterday: number;
+  thisWeek: number;
+  lastWeek: number;
+  thisMonth: number;
+  lastMonth: number;
+  daily: { date: string; unique: number }[];
+}
+
+export function fetchVisitorAnalytics(): Promise<VisitorAnalyticsSummary> {
+  return fetch('/api/admin/analytics', { headers: authHeaders(), cache: 'no-store' }).then((r) =>
+    j<VisitorAnalyticsSummary>(r)
+  );
+}
+
+/** Stable anonymous device id for visitor analytics (no account needed). */
+export function visitorId(): string {
+  const KEY = 'sl_vid';
+  let vid = '';
+  try {
+    vid = localStorage.getItem(KEY) ?? '';
+  } catch {
+    /* storage unavailable (private mode) — ephemeral id */
+  }
+  if (!vid) {
+    vid = `v-${
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+    }`;
+    try {
+      localStorage.setItem(KEY, vid);
+    } catch {
+      /* ignore */
+    }
+  }
+  return vid;
+}
+
+/** Fire-and-forget visitor heartbeat (called every 2 min + on focus). */
+export function pingVisitor(): void {
+  void fetch('/api/analytics/ping', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ vid: visitorId() }),
+    keepalive: true,
+  }).catch(() => {});
+}
+
 export function updatePushPrefs(patch: Partial<PushPrefs>): Promise<PushPrefs> {
   return fetch('/api/admin/push/prefs', {
     method: 'PATCH',

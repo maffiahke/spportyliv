@@ -25,7 +25,7 @@ import {
   UpcomingEvent,
 } from './types/sports';
 import { AppData, DEFAULT_SITE_SETTINGS } from './types/iptv';
-import { fetchAppData } from './lib/api';
+import { fetchAppData, pingVisitor } from './lib/api';
 import { subscribeStoreChanges } from './lib/realtime';
 import {
   fetchCurrentUser,
@@ -136,6 +136,21 @@ export default function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content]);
+
+  // Visitor analytics heartbeat: ping every 2 min (and when the tab becomes
+  // visible again) so "online now" and the daily unique counts stay truthful.
+  useEffect(() => {
+    pingVisitor();
+    const timer = window.setInterval(pingVisitor, 120_000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') pingVisitor();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
 
   // Time-derived statuses must advance while the page is open: re-merge the
   // last fetched data periodically so a match flips UPCOMING → LIVE at kickoff

@@ -51,6 +51,16 @@ export interface UserSessionRecord {
   expiresAt: string;
 }
 
+/** Unique-visitor analytics buckets (UTC day → visitor ids). */
+export interface VisitorAnalytics {
+  /** UTC date (yyyy-mm-dd) → visitor ids seen that day (pruned after ~40 days). */
+  days: Record<string, string[]>;
+  /** Visitor id → last-seen epoch ms; feeds the "online now" count. */
+  online: Record<string, number>;
+  /** Last UTC day the old buckets were pruned. */
+  lastPrune?: string;
+}
+
 export interface StoreData {
   playlists: IptvPlaylist[];
   channels: IptvChannel[];
@@ -62,6 +72,7 @@ export interface StoreData {
   pushPrefs: PushPrefs;
   users: StoredUser[];
   userSessions: UserSessionRecord[];
+  analytics: VisitorAnalytics;
   vapid?: VapidKeys;
 }
 
@@ -83,6 +94,7 @@ const EMPTY: StoreData = {
   pushPrefs: { newEvents: true, syncErrors: true, syncChanges: false },
   users: [],
   userSessions: [],
+  analytics: { days: {}, online: {} },
 };
 
 let cache: StoreData | null = null;
@@ -146,6 +158,7 @@ function normalize(raw: Partial<StoreData>): StoreData {
   loaded.pushPrefs = { ...EMPTY.pushPrefs, ...(loaded.pushPrefs ?? {}) };
   loaded.users = loaded.users ?? [];
   loaded.userSessions = loaded.userSessions ?? [];
+  loaded.analytics = loaded.analytics ?? { days: {}, online: {} };
   loaded.channels = loaded.channels ?? [];
   loaded.playlists = loaded.playlists ?? [];
   loaded.liveEvents = loaded.liveEvents ?? [];
@@ -247,6 +260,147 @@ export function loadStore(): StoreData {
   // Pre-init callers get an empty shell; ensureStoreReady() has usually run.
   cache = normalize(structuredClone(EMPTY));
   return cache;
+}
+
+/* ---------------- Visitor analytics ---------------- */
+
+const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+const ONLINE_KEEP_MS = 10 * 60 * 1000;
+const DAY_BUCKET_KEEP = 40; // days of daily unique-visitor buckets
+
+const utcDayKey = (d: Date): string =>
+  `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+
+/** Count of distinct visitors seen within the last 5 minutes. */
+export function onlineVisitorCount(): number {
+  const analytics = loadStore().analytics;
+  const cutoff = Date.now() - ONLINE_WINDOW_MS;
+  let count = 0;
+  for (const lastSeen of Object.values(analytics.online)) {
+    if (lastSeen >= cutoff) count++;
+  }
+  return count;
+}
+
+/** Distinct visitors across the UTC-day buckets covering [fromKey, toKey]. */
+function distinctAcrossDays(fromKey: string, toKey: string): number {
+  const analytics = loadStore().analytics;
+  const seen = new Set<string>();
+  for (const [day, ids] of Object.entries(analytics.days)) {
+    if (day >= fromKey && day <= toKey) {
+      for (const id of ids) seen.add(id);
+    }
+  }
+  return seen.size;
+}
+
+/** ISO week (Monday-based) key start: the Monday on/before the given day. */
+function weekStartKey(d: Date): string {
+  const day = d.getUTCDay() || 7; // Sunday = 7
+  const monday = new Date(d);
+  monday.setUTCDate(d.getUTCDate() - (day - 1));
+  return utcDayKey(monday);
+}
+
+export interface VisitorSummaryPoint {
+  date: string;
+  unique: number;
+}
+
+export interface VisitorAnalyticsSummary {
+  onlineNow: number;
+  today: number;
+  yesterday: number;
+  thisWeek: number;
+  lastWeek: number;
+  thisMonth: number;
+  lastMonth: number;
+  /** Last 14 UTC days, oldest first. */
+  daily: VisitorSummaryPoint[];
+}
+
+/** Per-day / per-week / per-month unique-visitor analytics. */
+export function visitorAnalyticsSummary(): VisitorAnalyticsSummary {
+  const now = new Date();
+  const today = now;
+  const yesterday = new Date(now); yesterday.setUTCDate(now.getUTCDate() - 1);
+  // Last week = the Monday..Sunday window fully before this week.
+  const lwMonday = new Date(now);
+  lwMonday.setUTCDate(now.getUTCDate() - 7 - ((now.getUTCDay() || 7) - 1));
+  const lwSunday = new Date(lwMonday);
+  lwSunday.setUTCDate(lwMonday.getUTCDate() + 6);
+  const lastMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  const lastMonthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+  const daily: VisitorSummaryPoint[] = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(now); d.setUTCDate(now.getUTCDate() - i);
+    const key = utcDayKey(d);
+    daily.push({ date: key, unique: loadStore().analytics.days[key]?.length ?? 0 });
+  }
+
+  return {
+    onlineNow: onlineVisitorCount(),
+    today: distinctAcrossDays(utcDayKey(today), utcDayKey(today)),
+    yesterday: distinctAcrossDays(utcDayKey(yesterday), utcDayKey(yesterday)),
+    thisWeek: distinctAcrossDays(weekStartKey(now), utcDayKey(now)),
+    lastWeek: distinctAcrossDays(utcDayKey(lwMonday), utcDayKey(lwSunday)),
+    thisMonth: distinctAcrossDays(utcDayKey(monthStart), utcDayKey(now)),
+    lastMonth: distinctAcrossDays(utcDayKey(lastMonth), utcDayKey(lastMonthEnd)),
+    daily,
+  };
+}
+
+/**
+ * Record a visitor heartbeat. Mutates the cache immediately; persists only
+ * when something durable changed (new unique for the day, or the online
+ * membership changed) so 2-minute pings don't spam the database.
+ */
+export function recordVisitorPing(visitorId: string): { ok: true; onlineNow: number } | { ok: false } {
+  const vid = visitorId.trim().slice(0, 64);
+  if (!vid) return { ok: false };
+  const store = loadStore();
+  const analytics = store.analytics;
+  const now = Date.now();
+  const todayKey = utcDayKey(new Date(now));
+
+  analytics.days[todayKey] ??= [];
+  const dayList = analytics.days[todayKey];
+  const newUnique = !dayList.includes(vid);
+  if (newUnique) dayList.push(vid);
+
+  // Online window membership before/after the heartbeat.
+  const cutoff = now - ONLINE_WINDOW_MS;
+  const onlineBefore = onlineVisitorCount();
+  const wasOnline = (analytics.online[vid] ?? 0) >= cutoff;
+  analytics.online[vid] = now;
+  const onlineAfter = wasOnline ? onlineBefore : onlineBefore + 1;
+
+  // Prune stale entries (at most once per UTC day for the day buckets).
+  let pruned = false;
+  for (const [vidKey, lastSeen] of Object.entries(analytics.online)) {
+    if (now - lastSeen > ONLINE_KEEP_MS) {
+      delete analytics.online[vidKey];
+      pruned = true;
+    }
+  }
+  if (analytics.lastPrune !== todayKey) {
+    const oldestAllowed = utcDayKey(new Date(now - DAY_BUCKET_KEEP * 86_400_000));
+    for (const day of Object.keys(analytics.days)) {
+      if (day < oldestAllowed) {
+        delete analytics.days[day];
+        pruned = true;
+      }
+    }
+    analytics.lastPrune = todayKey;
+    pruned = true;
+  }
+
+  if (newUnique || pruned || Math.abs(onlineAfter - onlineBefore) > 0) {
+    void saveStore().catch(() => {});
+  }
+  return { ok: true, onlineNow: onlineAfter };
 }
 
 export function getStoreRevision(): number {

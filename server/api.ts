@@ -28,9 +28,11 @@ import {
   loadStore,
   makeId,
   onStoreChange,
+  recordVisitorPing,
   saveStore,
   storeBackend,
   syncFromDatabase,
+  visitorAnalyticsSummary,
   type StoredUser,
   type StoreData,
   type UserSessionRecord,
@@ -1039,6 +1041,26 @@ export async function handleApiRequest(
   // Viewer account routes (public).
   if (await handleUserAuth(req, res, path, method, store)) return true;
 
+  // Visitor analytics heartbeat (public, anonymous device id).
+  if (path === '/api/analytics/ping' && method === 'POST') {
+    let body: { vid?: unknown } = {};
+    try {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}') as { vid?: unknown };
+    } catch {
+      /* empty body is fine — a malformed vid is rejected below */
+    }
+    const vid = typeof body.vid === 'string' ? body.vid : '';
+    const result = recordVisitorPing(vid);
+    if (!result.ok) {
+      sendJson(res, 400, { error: 'invalid visitor id' });
+      return true;
+    }
+    sendJson(res, 200, { ok: true, onlineNow: result.onlineNow });
+    return true;
+  }
+
   // Admin routes: authenticate first (except the login itself).
   if (path.startsWith('/api/admin')) {
     const handled = await handleAdminAuth(req, res, path, method);
@@ -1760,6 +1782,12 @@ export async function handleApiRequest(
     } catch (err) {
       sendJson(res, 400, { error: (err as Error).message });
     }
+    return true;
+  }
+
+  // ---------------- Visitor analytics ----------------
+  if (path === '/api/admin/analytics' && method === 'GET') {
+    sendJson(res, 200, visitorAnalyticsSummary());
     return true;
   }
 

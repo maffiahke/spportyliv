@@ -1,10 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
+  BarChart3,
   CalendarClock,
   CheckCircle2,
   Clock,
+  Eye,
   Image as ImageIcon,
   Layers,
   ListVideo,
@@ -12,6 +14,7 @@ import {
   RefreshCw,
   Sparkles,
   Tv,
+  Users,
   Zap,
 } from 'lucide-react';
 import {
@@ -20,7 +23,7 @@ import {
   IptvChannel,
   IptvPlaylist,
 } from '../../types/iptv';
-import { syncPlaylist } from '../../lib/api';
+import { syncPlaylist, fetchVisitorAnalytics, type VisitorAnalyticsSummary } from '../../lib/api';
 import { Spinner } from './ui';
 
 interface DashboardTabProps {
@@ -91,6 +94,19 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
 }) => {
   const [syncingAll, setSyncingAll] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [visitorStats, setVisitorStats] = useState<VisitorAnalyticsSummary | null>(null);
+
+  const refreshVisitorStats = React.useCallback(() => {
+    fetchVisitorAnalytics()
+      .then(setVisitorStats)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    refreshVisitorStats();
+    const timer = window.setInterval(refreshVisitorStats, 60_000);
+    return () => window.clearInterval(timer);
+  }, [refreshVisitorStats]);
 
   const stats = useMemo(() => {
     const enabled = channels.filter((c) => c.enabled).length;
@@ -252,6 +268,104 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
           sub="Hero carousel slides"
           onClick={() => onNavigate('banners')}
         />
+      </section>
+
+      {/* Visitor traffic (unique visitors per day / week / month) */}
+      <section className="neon-card p-4">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h3 className="font-display font-extrabold text-sm text-slate-900 flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-[#1D6BFF]" />
+            Visitor Traffic
+          </h3>
+          <button
+            type="button"
+            onClick={refreshVisitorStats}
+            title="Refresh traffic stats"
+            className="neon-btn-ghost px-2.5 py-1.5 text-[11px] cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        {!visitorStats ? (
+          <p className="text-xs text-slate-500 py-4 text-center">Loading traffic…</p>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            {/* Online now + headline uniques */}
+            <div className="lg:col-span-4 flex flex-col gap-3">
+              <div className="neon-row p-3.5 flex items-center gap-3">
+                <span className="w-11 h-11 rounded-2xl flex items-center justify-center text-white shrink-0 bg-gradient-to-br from-[#10B981] to-[#34D399] shadow-[4px_4px_14px_rgba(16,185,129,0.3),-3px_-3px_10px_rgba(255,255,255,0.9)]">
+                  <Eye className="w-5 h-5" />
+                </span>
+                <div>
+                  <p className="text-[10px] font-semibold tracking-[0.08em] text-slate-500 uppercase">Online now</p>
+                  <p className="font-display font-extrabold text-2xl leading-tight text-slate-950 tabular-nums flex items-center gap-2">
+                    {visitorStats.onlineNow}
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  </p>
+                  <p className="text-[10.5px] text-slate-500">active in the last 5 minutes</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {(
+                  [
+                    ['Today', visitorStats.today, visitorStats.yesterday, 'Yesterday'],
+                    ['This week', visitorStats.thisWeek, visitorStats.lastWeek, 'Last week'],
+                    ['This month', visitorStats.thisMonth, visitorStats.lastMonth, 'Last month'],
+                  ] as [string, number, number, string][]
+                ).map(([label, current, previous, prevLabel]) => {
+                  const up = current >= previous && previous > 0;
+                  const flat = previous === 0;
+                  return (
+                    <div key={label} className="neon-row p-3 text-center">
+                      <p className="text-[10px] font-semibold tracking-[0.08em] text-slate-500 uppercase">{label}</p>
+                      <p className="font-display font-extrabold text-xl text-slate-950 tabular-nums">{current}</p>
+                      <p className="text-[9.5px] text-slate-500 truncate">
+                        {flat ? `no ${prevLabel.toLowerCase()} data` : `${up ? '▲' : '▼'} ${previous} ${prevLabel.toLowerCase()}`}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Last 14 days chart */}
+            <div className="lg:col-span-8">
+              <div className="neon-row p-3.5 h-full">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] font-semibold tracking-[0.08em] text-slate-500 uppercase flex items-center gap-1.5">
+                    <Users className="w-3 h-3" />
+                    Unique visitors · last 14 days
+                  </p>
+                  <p className="text-[9.5px] text-slate-500">UTC days · updates every minute</p>
+                </div>
+                <div className="flex items-end gap-[5px] h-28">
+                  {visitorStats.daily.map((d) => {
+                    const max = Math.max(...visitorStats.daily.map((x) => x.unique), 1);
+                    const pct = Math.max((d.unique / max) * 100, d.unique > 0 ? 8 : 3);
+                    return (
+                      <div
+                        key={d.date}
+                        className="flex-1 flex flex-col items-center justify-end h-full group"
+                        title={`${d.date} — ${d.unique} unique visitor${d.unique === 1 ? '' : 's'}`}
+                      >
+                        <span className="text-[9px] font-bold text-slate-600 tabular-nums mb-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {d.unique}
+                        </span>
+                        <div
+                          className="w-full rounded-t-md bg-gradient-to-t from-[#1D6BFF] to-[#7C3AED] min-h-[3px] transition-all duration-500"
+                          style={{ height: `${pct}%` }}
+                        />
+                        <span className="text-[8.5px] text-slate-500 mt-1 tabular-nums">
+                          {d.date.slice(8)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Sync health + sport mix */}

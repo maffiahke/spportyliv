@@ -371,6 +371,7 @@ export async function loadSnapshot(): Promise<StoreSnapshot | null> {
     },
     users: viewers.map(viewerFromRow),
     userSessions: sessions.map(sessionFromRow),
+    analytics: (docMap.get('analytics') as StoreData['analytics'] | undefined) ?? { days: {}, online: {} },
     vapid: (docMap.get('vapid') as VapidKeys | undefined) ?? undefined,
   };
 
@@ -490,6 +491,7 @@ export async function persistSnapshot(
   const docs: Array<[string, unknown]> = [
     ['settings', data.settings ?? {}],
     ['pushPrefs', data.pushPrefs ?? {}],
+    ['analytics', data.analytics ?? { days: {}, online: {} }],
   ];
   if (data.vapid) docs.push(['vapid', data.vapid]);
   for (const [key, value] of docs) {
@@ -498,7 +500,9 @@ export async function persistSnapshot(
         ? previous.settings
         : key === 'pushPrefs'
           ? previous.pushPrefs
-          : previous.vapid
+          : key === 'analytics'
+            ? previous.analytics
+            : previous.vapid
       : undefined;
     if (JSON.stringify(prevValue) === JSON.stringify(value)) continue;
     const json = value as Prisma.InputJsonValue;
