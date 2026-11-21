@@ -1,6 +1,7 @@
 import { buildProxiedUrl, isHlsUrl } from './proxy';
 import { shortCode } from './m3u';
 import {
+  AdminEventStatus,
   AdminLiveEvent,
   AdminUpcomingEvent,
   AppData,
@@ -36,6 +37,36 @@ function headersFromMatchStream(s: MatchStream): StreamHeaders {
   if (s.userAgent) out.userAgent = s.userAgent;
   if (s.referer) out.referer = s.referer;
   return out;
+}
+
+/** Exact kickoff epoch for an event: feed timestamp first, date+time fallback. */
+export function eventStartMs(ev: {
+  startTimestampMs?: number;
+  dateKey?: string;
+  time?: string;
+}): number | null {
+  if (ev.startTimestampMs && ev.startTimestampMs > 0) return ev.startTimestampMs;
+  const kickoff = parseKickoff(ev.dateKey, ev.time);
+  return kickoff ? kickoff.getTime() : null;
+}
+
+/**
+ * Time-based status:
+ *  - started and within 2h of kickoff → live
+ *  - started more than 2h ago → ended
+ *  - future within the upcoming window → upcoming
+ *  - future beyond it → scheduled
+ * Falls back to the stored status when the event carries no time information.
+ */
+export function computeEventStatus(
+  ev: { startTimestampMs?: number; dateKey?: string; time?: string; status?: AdminEventStatus },
+  fallback: AdminEventStatus = 'scheduled',
+): AdminEventStatus {
+  const start = eventStartMs(ev);
+  if (start === null) return ev.status ?? fallback;
+  const delta = start - Date.now();
+  if (delta > 0) return delta <= UPCOMING_WINDOW_MS ? 'upcoming' : 'scheduled';
+  return -delta <= LIVE_WINDOW_MS ? 'live' : 'ended';
 }
 
 export function adminEventToLiveMatch(
@@ -83,13 +114,19 @@ export function adminEventToLiveMatch(
     elapsedSeconds: 0,
     statusLabel:
       ev.statusLabel ??
-      (ev.status === 'ended'
-        ? 'ENDED'
-        : ev.status === 'scheduled'
-          ? 'SCHEDULED'
-          : ev.status === 'upcoming'
-            ? 'UPCOMING'
-            : undefined),
+      (() => {
+        const st = computeEventStatus(ev, ev.status ?? 'live');
+        switch (st) {
+          case 'ended':
+            return 'ENDED';
+          case 'upcoming':
+            return 'UPCOMING';
+          case 'scheduled':
+            return 'SCHEDULED';
+          default:
+            return undefined;
+        }
+      })(),
     quality: ev.quality,
     viewers: ev.viewers || '—',
     videoUrl: streamUrl,
@@ -150,6 +187,8 @@ export function adminUpcomingToUpcomingEvent(ev: AdminUpcomingEvent): UpcomingEv
 
 /** Matches this close to kickoff are promoted to the live-style Upcoming cards. */
 const UPCOMING_WINDOW_MS = 4 * 60 * 60 * 1000;
+/** A match stays LIVE for this long after kickoff; after that it is ENDED. */
+export const LIVE_WINDOW_MS = 2 * 60 * 60 * 1000;
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -199,6 +238,7 @@ function formatKickoffLabel(kickoff: Date, time?: string): string {
 export function adminUpcomingToLiveMatch(
   ev: AdminUpcomingEvent,
   kickoff: Date,
+  opts: { asLive?: boolean } = {},
 ): LiveMatch {
   const [leftTheme, rightTheme] = SPORT_THEMES[ev.sport] ?? SPORT_THEMES.other;
   // Failover sources for imported matches: the primary first, then the rest.
@@ -230,7 +270,8 @@ export function adminUpcomingToLiveMatch(
     league: ev.league,
     leagueCrest: ev.league,
     elapsedSeconds: 0,
-    statusLabel: 'UPCOMING',
+    statusLabel: opts.asLive ? 'LIVE' : 'UPCOMING',
+    isUpcoming: !opts.asLive,
     quality: 'HD',
     viewers: '',
     videoUrl: streamUrl,
@@ -240,7 +281,6 @@ export function adminUpcomingToLiveMatch(
     venue: ev.league,
     stats: [],
     commentary: [],
-    isUpcoming: true,
     kickoffLabel: formatKickoffLabel(kickoff, ev.time),
     kickoffAt: kickoff.toISOString(),
     dateKey: ev.dateKey,
@@ -275,9 +315,12 @@ export interface MergedAppContent {
  * in the admin console are shown — no built-in demo/mock content.
  */
 export function mergeAppContent(data: AppData): MergedAppContent {
-  const liveMatches = dedupeById(
+  // Live events: hide ones the 2h window has already ended; fixtures whose
+  // kickoff time arrived are promoted from the upcoming list below.
+  const adminLiveMatches = dedupeById(
     data.liveEvents
       .filter((e) => e.enabled && e.streamUrl)
+      .filter((e) => computeEventStatus(e, (e.status ?? 'live') as AdminEventStatus) !== 'ended')
       .map((e) => adminEventToLiveMatch(e, data.channels)),
   );
 
@@ -288,13 +331,17 @@ export function mergeAppContent(data: AppData): MergedAppContent {
   );
 
   const enabledUpcoming = data.upcomingEvents.filter((e) => e.enabled);
-  const now = Date.now();
   const soonEntries: Array<{ ev: AdminUpcomingEvent; kickoff: Date }> = [];
   const laterEntries: AdminUpcomingEvent[] = [];
+  const promotedLive: LiveMatch[] = [];
   for (const ev of enabledUpcoming) {
+    const status = computeEventStatus(ev, (ev.status ?? 'scheduled') as AdminEventStatus);
+    if (status === 'ended') continue; // past the live window — not shown publicly
     const kickoff = parseKickoff(ev.dateKey, ev.time);
-    const msUntilKickoff = kickoff ? kickoff.getTime() - now : Number.POSITIVE_INFINITY;
-    if (kickoff && msUntilKickoff >= 0 && msUntilKickoff <= UPCOMING_WINDOW_MS) {
+    if (status === 'live') {
+      // Kickoff time arrived (within the 2h live window) — show it live.
+      promotedLive.push(adminUpcomingToLiveMatch(ev, kickoff ?? new Date(), { asLive: true }));
+    } else if (status === 'upcoming' && kickoff) {
       soonEntries.push({ ev, kickoff });
     } else {
       laterEntries.push(ev);
@@ -311,7 +358,10 @@ export function mergeAppContent(data: AppData): MergedAppContent {
   );
   const scheduledEvents = laterEntries.map(adminUpcomingToUpcomingEvent);
   const upcomingEvents = dedupeById(
-    enabledUpcoming.map(adminUpcomingToUpcomingEvent),
+    enabledUpcoming
+      // Ended fixtures drop out of the public fixture list entirely.
+      .filter((ev) => computeEventStatus(ev, (ev.status ?? 'scheduled') as AdminEventStatus) !== 'ended')
+      .map(adminUpcomingToUpcomingEvent),
   );
 
   // Banners: only admin-created banners, mapped to their target event's playable match.
@@ -328,7 +378,7 @@ export function mergeAppContent(data: AppData): MergedAppContent {
         subtitleLine1: b.subtitleLine1,
         subtitleLine2: b.subtitleLine2,
         ctaLabel: b.ctaLabel,
-        matchId: targetEvent ? `iptv-ev-${targetEvent.id}` : liveMatches[0]?.id,
+        matchId: targetEvent ? `iptv-ev-${targetEvent.id}` : adminLiveMatches[0]?.id,
         bgGradient: b.bgGradient,
         imageUrl: b.imageUrl?.trim() || undefined,
       };
@@ -339,10 +389,10 @@ export function mergeAppContent(data: AppData): MergedAppContent {
   const settings: SiteSettings = { ...DEFAULT_SITE_SETTINGS, ...(data.settings ?? {}) };
 
   return {
-    liveMatches,
+    liveMatches: dedupeById([...promotedLive, ...adminLiveMatches]),
     upcomingMatches,
     scheduledEvents,
-    upcomingEvents,
+    upcomingEvents: upcomingEvents,
     tvChannels,
     heroSlides,
     settings,

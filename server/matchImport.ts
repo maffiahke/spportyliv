@@ -176,12 +176,20 @@ export function parseMatchesFromM3U(text: string): MatchImport[] {
 
 /* ------------------------------- Into the store ------------------------------- */
 
+/** A match still inside this window after kickoff counts as live. */
+const LIVE_WINDOW_MS = 2 * 60 * 60 * 1000;
+
 /** true → live event; false → upcoming fixture. */
 function isLiveMatch(m: MatchImport): boolean {
   const kw = (m.statusKeyword ?? '').toUpperCase();
   if (kw.includes('LIVE') && !kw.includes('UPCOMING')) return true;
   if (m.startTimestampMs) return m.startTimestampMs <= Date.now();
   return false;
+}
+
+/** True when the match kicked off more than 2 hours ago — past the live window. */
+function isEndedMatch(m: MatchImport): boolean {
+  return Boolean(m.startTimestampMs && Date.now() - m.startTimestampMs > LIVE_WINDOW_MS);
 }
 
 function dedupeKey(m: MatchImport): string {
@@ -220,6 +228,11 @@ export function importMatchesIntoStore(
       continue;
     }
     seenInBatch.add(key);
+    if (isEndedMatch(m)) {
+      // More than 2 hours past kickoff — nothing left to show.
+      result.skipped++;
+      continue;
+    }
 
     const streams = streamsOf(m);
     const primary = streams[0];
@@ -253,7 +266,8 @@ export function importMatchesIntoStore(
         existingLive.homeLogoUrl = m.logo1 ?? existingLive.homeLogoUrl;
         existingLive.awayLogoUrl = m.logo2 ?? existingLive.awayLogoUrl;
         existingLive.time = time || existingLive.time;
-        existingLive.status = 'live';
+        existingLive.startTimestampMs = m.startTimestampMs;
+        existingLive.status = isLiveMatch(m) ? 'live' : 'upcoming';
         // Leave enabled untouched on re-import updates.
         result.updated++;
         continue;
@@ -278,6 +292,7 @@ export function importMatchesIntoStore(
         homeLogoUrl: m.logo1,
         awayLogoUrl: m.logo2,
         status: 'live',
+        startTimestampMs: m.startTimestampMs,
         dateKey,
         time,
         // Imported entries start disabled: the admin reviews and enables them.
@@ -298,6 +313,7 @@ export function importMatchesIntoStore(
       existingUpcoming.awayTeam = m.team2;
       existingUpcoming.time = time || existingUpcoming.time;
       existingUpcoming.status = 'upcoming';
+      existingUpcoming.startTimestampMs = m.startTimestampMs;
       // Leave enabled untouched on re-import updates.
       result.updated++;
       continue;
@@ -319,6 +335,7 @@ export function importMatchesIntoStore(
       customStreams: streams,
       headers: headersFromStream(primary ?? {}),
       status: 'upcoming',
+      startTimestampMs: m.startTimestampMs,
       // Imported entries start disabled: the admin reviews and enables them.
       enabled: false,
     };

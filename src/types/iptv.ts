@@ -86,6 +86,8 @@ export interface AdminLiveEvent {
   customStreams?: MatchStream[];
   /** Publication state shown to viewers. */
   status?: AdminEventStatus;
+  /** Exact kickoff epoch ms from imported feeds (authoritative for time-based status). */
+  startTimestampMs?: number;
   /** Event date (ISO yyyy-mm-dd) and kickoff time. */
   dateKey?: string;
   time?: string;
@@ -108,6 +110,8 @@ export interface AdminUpcomingEvent {
   /** Direct failover sources for imported matches (first mirrors streamUrl). */
   customStreams?: MatchStream[];
   status?: AdminEventStatus;
+  /** Exact kickoff epoch ms from imported feeds (authoritative for time-based status). */
+  startTimestampMs?: number;
   enabled: boolean;
 }
 

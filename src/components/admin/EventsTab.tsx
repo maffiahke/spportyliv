@@ -9,6 +9,7 @@ import {
   StreamHeaders,
 } from '../../types/iptv';
 import { createEvent, deleteEvent, importMatches, updateEvent } from '../../lib/api';
+import { computeEventStatus } from '../../lib/appData';
 import { HeadersEditor, NeonField, NeonInput, NeonSelect, NeonToggle } from './ui';
 
 interface EventsTabProps {
@@ -561,8 +562,8 @@ export const EventsTab: React.FC<EventsTabProps> = ({
               </button>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={statusBadgeClass(ev.status ?? 'live')}>
-                    {(ev.status ?? 'live').toUpperCase()}
+                  <span className={statusBadgeClass(computeEventStatus(ev, ev.status ?? 'live'))} title="Status is derived from the event time (live = within 2h of kickoff, ended = past it)">
+                    {computeEventStatus(ev, ev.status ?? 'live').toUpperCase()}
                   </span>
                   <span className="font-display font-bold text-xs text-slate-900 truncate">
                     {ev.homeTeam} vs {ev.awayTeam}
@@ -654,8 +655,8 @@ export const EventsTab: React.FC<EventsTabProps> = ({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="neon-badge">{ev.dateKey}</span>
-                  <span className={statusBadgeClass(ev.status ?? 'upcoming')}>
-                    {(ev.status ?? 'upcoming').toUpperCase()}
+                  <span className={statusBadgeClass(computeEventStatus(ev, ev.status ?? 'scheduled'))} title="Status is derived from the event time (live = within 2h of kickoff, ended = past it)">
+                    {computeEventStatus(ev, ev.status ?? 'scheduled').toUpperCase()}
                   </span>
                   <span className="font-display font-bold text-xs text-slate-900 truncate">
                     {ev.homeTeam} vs {ev.awayTeam}

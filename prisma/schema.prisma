@@ -85,6 +85,7 @@ model LiveEvent {
   status      String?
   dateKey     String? @map("date_key")
   time        String?
+  startTimestampMs BigInt? @map("start_timestamp_ms")
   enabled     Boolean @default(true)
 
   @@map("live_events")
@@ -103,6 +104,7 @@ model UpcomingEvent {
   customStreams Json @default("[]") @map("custom_streams")
   headers   Json    @default("{}")
   status    String?
+  startTimestampMs BigInt? @map("start_timestamp_ms")
   enabled   Boolean @default(true)
 
   @@map("upcoming_events")

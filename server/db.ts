@@ -147,6 +147,7 @@ function liveEventRecord(e: AdminLiveEvent) {
     status: e.status ?? null,
     dateKey: e.dateKey ?? null,
     time: e.time ?? null,
+    startTimestampMs: e.startTimestampMs ? BigInt(Math.round(e.startTimestampMs)) : null,
     enabled: e.enabled !== false,
   };
 }
@@ -180,6 +181,7 @@ const liveEventFromRow = (r: LiveEventRow): AdminLiveEvent => ({
   status: (r.status as AdminLiveEvent['status']) ?? undefined,
   dateKey: r.dateKey ?? undefined,
   time: r.time ?? undefined,
+  startTimestampMs: r.startTimestampMs ? Number(r.startTimestampMs) : undefined,
   enabled: r.enabled,
 });
 
@@ -197,6 +199,7 @@ function upcomingEventRecord(e: AdminUpcomingEvent) {
     customStreams: (e.customStreams ?? []) as unknown as Prisma.InputJsonValue,
     headers: (e.headers ?? {}) as Prisma.InputJsonValue,
     status: e.status ?? null,
+    startTimestampMs: e.startTimestampMs ? BigInt(Math.round(e.startTimestampMs)) : null,
     enabled: e.enabled !== false,
   };
 }
@@ -219,6 +222,7 @@ const upcomingEventFromRow = (r: UpcomingEventRow): AdminUpcomingEvent => ({
     : undefined,
   headers: headersOf(r.headers),
   status: (r.status as AdminUpcomingEvent['status']) ?? undefined,
+  startTimestampMs: r.startTimestampMs ? Number(r.startTimestampMs) : undefined,
   enabled: r.enabled,
 });
 
