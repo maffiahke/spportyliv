@@ -129,6 +129,70 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
 
   const levelLabel = (height: number): string => (height >= 2160 ? '4K' : `${height}p`);
 
+  // --- Fullscreen + auto-rotate -------------------------------------------
+  // Android/Chrome support screen.orientation.lock('landscape') in
+  // fullscreen. iOS Safari does not, so there the player is rotated with CSS
+  // (width/height swapped) to simulate landscape.
+  const [forceLandscape, setForceLandscape] = useState(false);
+
+  const unlockOrientation = () => {
+    try {
+      screen.orientation?.unlock?.();
+    } catch {
+      /* noop */
+    }
+    setForceLandscape(false);
+  };
+
+  const toggleFullscreen = async (): Promise<void> => {
+    const container = playerContainerRef.current;
+    const video = videoRef.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
+    const el: HTMLElement = (container ?? document.documentElement) as HTMLElement & {
+      requestFullscreen?: (options?: { navigationUI?: string }) => Promise<void>;
+    };
+    try {
+      if (!document.fullscreenElement) {
+        if (el.requestFullscreen) {
+          await el.requestFullscreen();
+        } else if (video?.webkitEnterFullscreen) {
+          // iOS native video fullscreen rotates with the device itself.
+          video.webkitEnterFullscreen();
+          return;
+        }
+        const orientation = screen.orientation as ScreenOrientation & {
+          lock?: (orientation: 'landscape' | 'portrait') => Promise<void>;
+        };
+        if (orientation?.lock) {
+          try {
+            await orientation.lock('landscape');
+          } catch {
+            // Not permitted/unsupported (iOS) — rotate the player with CSS.
+            setForceLandscape(true);
+          }
+        } else {
+          setForceLandscape(true);
+        }
+      } else if (document.exitFullscreen) {
+        await document.exitFullscreen();
+        unlockOrientation();
+      }
+    } catch {
+      /* user denied or API unavailable */
+    }
+  };
+
+  // Keep rotation state in sync when fullscreen is left via system gestures.
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement) unlockOrientation();
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      unlockOrientation();
+    };
+  }, []);
+
   const retryStream = () => {
     setStreamState('loading');
     setRetryNonce((n) => n + 1);
@@ -397,7 +461,9 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
       <div className="neu-surface rounded-[26px] p-2 sm:p-3 space-y-2">
         <div
           ref={playerContainerRef}
-          className="relative aspect-video w-full rounded-[20px] overflow-hidden text-white select-none bg-slate-950"
+          className={`relative aspect-video w-full rounded-[20px] overflow-hidden text-white select-none bg-slate-950 ${
+            forceLandscape ? 'player-force-landscape' : ''
+          }`}
           style={
             !videoUrl
               ? {
@@ -637,16 +703,11 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
 
               <button
                 type="button"
-                onClick={() => {
-                  const el = playerContainerRef.current || document.documentElement;
-                  if (!document.fullscreenElement && el.requestFullscreen) {
-                    el.requestFullscreen().catch(() => {});
-                  } else if (document.fullscreenElement && document.exitFullscreen) {
-                    document.exitFullscreen().catch(() => {});
-                  }
-                }}
+                onClick={() => void toggleFullscreen()}
                 aria-label="Toggle fullscreen"
-                className="neu-surface-sm neu-pressable w-9 h-9 rounded-full flex items-center justify-center text-slate-800 hover:text-[#1D6BFF] transition-colors cursor-pointer"
+                className={`neu-surface-sm neu-pressable w-9 h-9 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
+                  forceLandscape ? 'bg-[#1D6BFF] text-white' : 'text-slate-800 hover:text-[#1D6BFF]'
+                }`}
               >
                 <Maximize2 className="w-4 h-4" />
               </button>
