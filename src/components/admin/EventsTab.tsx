@@ -104,6 +104,9 @@ export const EventsTab: React.FC<EventsTabProps> = ({
   const [editingId, setEditingId] = useState<string | null>(null);
   // Multi-select across both event lists for bulk enable/disable.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Optional date filter ('' = all): matches dateKey, or the viewer-local date
+  // of the kickoff timestamp for imported events.
+  const [dateFilter, setDateFilter] = useState('');
   const formRef = useRef<HTMLFormElement>(null);
   const set = <K extends keyof EventFormState>(key: K, value: EventFormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -125,6 +128,19 @@ export const EventsTab: React.FC<EventsTabProps> = ({
       }
       return next;
     });
+
+  /** Local calendar date (yyyy-mm-dd) an event kicks off on. */
+  const localDateKey = (ev: AdminLiveEvent | AdminUpcomingEvent): string => {
+    if (ev.startTimestampMs) {
+      const d = new Date(ev.startTimestampMs);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+    return ev.dateKey ?? '';
+  };
+  const filterByDate = <T extends AdminLiveEvent | AdminUpcomingEvent>(events: T[]): T[] =>
+    dateFilter ? events.filter((ev) => localDateKey(ev) === dateFilter) : events;
+  const filteredLiveEvents = filterByDate(liveEvents);
+  const filteredUpcomingEvents = filterByDate(upcomingEvents);
 
   const bulkSetEnabled = async (on: boolean) => {
     if (busy || selectedIds.size === 0) return;
@@ -319,6 +335,33 @@ export const EventsTab: React.FC<EventsTabProps> = ({
             <Pencil className="w-3 h-3" />
             editing {isLive ? 'live event' : 'fixture'}
           </span>
+        )}
+      </div>
+
+      {/* Date filter (applies to both event lists) */}
+      <div className="neon-card p-3 flex items-center gap-2 flex-wrap">
+        <span className="font-display font-bold text-[11px] text-slate-700">Filter by date</span>
+        <input
+          type="date"
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          className="rounded-lg bg-[#EEF4FF] border border-white/85 shadow-[inset_2px_2px_6px_rgba(163,189,226,0.4),inset_-2px_-2px_6px_rgba(255,255,255,0.9)] px-2.5 py-1.5 text-[11px] text-slate-800 outline-none focus:border-[#1D6BFF]/60"
+          aria-label="Filter events by kickoff date"
+        />
+        {dateFilter && (
+          <>
+            <span className="text-[10.5px] text-slate-500">
+              {filteredLiveEvents.length} live · {filteredUpcomingEvents.length} fixtures
+            </span>
+            <button
+              type="button"
+              onClick={() => setDateFilter('')}
+              className="neon-btn-ghost px-3 py-1.5 text-[11px]"
+            >
+              <X className="w-3.5 h-3.5" />
+              Clear
+            </button>
+          </>
         )}
       </div>
 
@@ -551,25 +594,27 @@ export const EventsTab: React.FC<EventsTabProps> = ({
       <section className="space-y-3">
         <div className="flex items-center gap-3 px-1 flex-wrap">
           <h3 className="font-display font-extrabold text-sm text-slate-900">
-            Live Events <span className="text-slate-500">({liveEvents.length})</span>
+            Live Events <span className="text-slate-500">({filteredLiveEvents.length}{dateFilter ? ` of ${liveEvents.length}` : ''})</span>
           </h3>
-          {liveEvents.length > 0 && (
+          {filteredLiveEvents.length > 0 && (
             <button
               type="button"
               onClick={() => {
-                const allOn = liveEvents.every((e) => selectedIds.has(e.id));
-                setSectionSelected(liveEvents, !allOn);
+                const allOn = filteredLiveEvents.every((e) => selectedIds.has(e.id));
+                setSectionSelected(filteredLiveEvents, !allOn);
               }}
               className="neon-btn-ghost px-2.5 py-1 text-[10px]"
             >
-              {liveEvents.every((e) => selectedIds.has(e.id)) ? 'Unselect all' : 'Select all'}
+              {filteredLiveEvents.every((e) => selectedIds.has(e.id)) ? 'Unselect all' : 'Select all'}
             </button>
           )}
         </div>
-        {liveEvents.length === 0 ? (
-          <div className="neon-card p-6 text-center text-xs text-slate-500">No live events published yet.</div>
+        {filteredLiveEvents.length === 0 ? (
+          <div className="neon-card p-6 text-center text-xs text-slate-500">
+            {dateFilter ? 'No live events on this date.' : 'No live events published yet.'}
+          </div>
         ) : (
-          liveEvents.map((ev) => (
+          filteredLiveEvents.map((ev) => (
             <div key={ev.id} className="neon-row p-3.5 flex items-center gap-3 flex-wrap">
               <button
                 type="button"
@@ -649,25 +694,27 @@ export const EventsTab: React.FC<EventsTabProps> = ({
       <section className="space-y-3">
         <div className="flex items-center gap-3 px-1 flex-wrap">
           <h3 className="font-display font-extrabold text-sm text-slate-900">
-            Upcoming Fixtures <span className="text-slate-500">({upcomingEvents.length})</span>
+            Upcoming Fixtures <span className="text-slate-500">({filteredUpcomingEvents.length}{dateFilter ? ` of ${upcomingEvents.length}` : ''})</span>
           </h3>
-          {upcomingEvents.length > 0 && (
+          {filteredUpcomingEvents.length > 0 && (
             <button
               type="button"
               onClick={() => {
-                const allOn = upcomingEvents.every((e) => selectedIds.has(e.id));
-                setSectionSelected(upcomingEvents, !allOn);
+                const allOn = filteredUpcomingEvents.every((e) => selectedIds.has(e.id));
+                setSectionSelected(filteredUpcomingEvents, !allOn);
               }}
               className="neon-btn-ghost px-2.5 py-1 text-[10px]"
             >
-              {upcomingEvents.every((e) => selectedIds.has(e.id)) ? 'Unselect all' : 'Select all'}
+              {filteredUpcomingEvents.every((e) => selectedIds.has(e.id)) ? 'Unselect all' : 'Select all'}
             </button>
           )}
         </div>
-        {upcomingEvents.length === 0 ? (
-          <div className="neon-card p-6 text-center text-xs text-slate-500">No fixtures scheduled yet.</div>
+        {filteredUpcomingEvents.length === 0 ? (
+          <div className="neon-card p-6 text-center text-xs text-slate-500">
+            {dateFilter ? 'No fixtures on this date.' : 'No fixtures scheduled yet.'}
+          </div>
         ) : (
-          upcomingEvents.map((ev) => (
+          filteredUpcomingEvents.map((ev) => (
             <div key={ev.id} className="neon-row p-3.5 flex items-center gap-3 flex-wrap">
               <button
                 type="button"
