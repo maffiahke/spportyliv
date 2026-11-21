@@ -136,21 +136,14 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
 
   const hasNextStream = safeStreamIndex + 1 < streams.length;
   const nextStreamLabel = hasNextStream ? streams[safeStreamIndex + 1].label : null;
-  const switchToNextStream = () => {
-    if (!hasNextStream) return;
+  const switchToStream = (index: number) => {
+    if (index < 0 || index >= streams.length || index === safeStreamIndex) return;
     setStreamState('loading');
-    setStreamIndex(safeStreamIndex + 1);
+    setStreamIndex(index);
     setRetryNonce((n) => n + 1);
   };
-
-  // Auto-failover: when the active source fails and another one exists, give
-  // the current stream a few seconds (Retry still works) then move on.
-  useEffect(() => {
-    if (streamState !== 'error' || !hasNextStream) return;
-    const t = setTimeout(switchToNextStream, 4_000);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [streamState, safeStreamIndex, streams.length, retryNonce]);
+  // No automatic switching: a failed stream stays on screen and the viewer
+  // picks the next source themselves (buttons below).
 
   const title = channel ? channel.name : match.league;
   const subtitle = channel ? channel.currentShow : match.venue;
@@ -463,15 +456,15 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
               {nextStreamLabel ? (
                 <>
                   <span className="text-[11px] font-display font-semibold text-white/70">
-                    Switching to “{nextStreamLabel}” automatically…
+                    Next: “{nextStreamLabel}”
                   </span>
                   <button
                     type="button"
-                    onClick={switchToNextStream}
+                    onClick={() => switchToStream(safeStreamIndex + 1)}
                     className="inline-flex items-center gap-1.5 rounded-full bg-[#1D6BFF] hover:bg-[#2563EB] text-white text-xs font-display font-bold px-4 py-2 shadow-lg cursor-pointer"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    Switch now
+                    Switch to Stream {safeStreamIndex + 2}
                   </button>
                 </>
               ) : (
