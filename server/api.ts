@@ -262,7 +262,7 @@ async function testAllChannels(
 let autoSyncTimer: ReturnType<typeof setInterval> | null = null;
 
 /** Every 5 minutes, re-sync every playlist with autoSync enabled. */
-export function startAutoSync(intervalMs = 5 * 60 * 1000): void {
+export function startAutoSync(intervalMs = 10 * 60 * 1000): void {
   if (autoSyncTimer) return;
   autoSyncTimer = setInterval(() => {
     // The interval callback must never surface an unhandled rejection — a
