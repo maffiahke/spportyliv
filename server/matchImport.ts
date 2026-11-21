@@ -38,6 +38,8 @@ export interface MatchImport {
   statusKeyword?: string;
   /** Broadcast channels, shown as the fixture's "channel" label. */
   officialTv?: string[];
+  /** League/competition badge (M3U tvg-logo). */
+  leagueLogo?: string;
   streams: MatchStream[];
 }
 
@@ -165,6 +167,7 @@ export function parseMatchesFromM3U(text: string): MatchImport[] {
       team1,
       team2,
       time,
+      leagueLogo: entry.tvgLogo,
       streams: entry.url
         ? [{ title: entry.name, quality: undefined, url: entry.url, userAgent: entry.headers.userAgent, referer: entry.headers.referer }]
         : [],
@@ -311,6 +314,9 @@ export function importMatchesIntoStore(
       existingUpcoming.channel = channelLabel;
       existingUpcoming.homeTeam = m.team1;
       existingUpcoming.awayTeam = m.team2;
+      existingUpcoming.homeLogoUrl = m.logo1 ?? existingUpcoming.homeLogoUrl;
+      existingUpcoming.awayLogoUrl = m.logo2 ?? existingUpcoming.awayLogoUrl;
+      existingUpcoming.leagueLogo = m.leagueLogo ?? existingUpcoming.leagueLogo;
       existingUpcoming.time = time || existingUpcoming.time;
       existingUpcoming.status = 'upcoming';
       existingUpcoming.startTimestampMs = m.startTimestampMs;
@@ -329,6 +335,9 @@ export function importMatchesIntoStore(
       sport: sportFromCategory(m.category),
       league,
       channel: channelLabel,
+      homeLogoUrl: m.logo1,
+      awayLogoUrl: m.logo2,
+      leagueLogo: m.leagueLogo,
       dateKey,
       time,
       streamUrl: primary?.url,

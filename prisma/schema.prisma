@@ -98,6 +98,9 @@ model UpcomingEvent {
   sport     String
   league    String
   channel   String  @default("")
+  homeLogoUrl String? @map("home_logo_url")
+  awayLogoUrl String? @map("away_logo_url")
+  leagueLogo  String? @map("league_logo")
   dateKey   String  @default("") @map("date_key")
   time      String  @default("")
   streamUrl String? @map("stream_url")

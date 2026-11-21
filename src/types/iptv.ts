@@ -102,6 +102,11 @@ export interface AdminUpcomingEvent {
   sport: IptvSport;
   league: string;
   channel: string;
+  /** Team logos from imported feeds (rendered as images by TeamCrest). */
+  homeLogoUrl?: string;
+  awayLogoUrl?: string;
+  /** League/competition badge from feeds that provide one (M3U tvg-logo). */
+  leagueLogo?: string;
   /** ISO date, e.g. 2026-11-22 */
   dateKey: string;
   time: string;
