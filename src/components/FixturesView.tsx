@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, Clock } from 'lucide-react';
+import { Calendar, Clock, Search } from 'lucide-react';
 import { LiveMatch, SportCategoryId, UpcomingEvent } from '../types/sports';
 import type { AdsSettings } from '../types/iptv';
 import { UpcomingEventCard } from './UpcomingEventCard';
@@ -36,17 +36,29 @@ export const FixturesView: React.FC<FixturesViewProps> = ({
 }) => {
   const [selectedDate, setSelectedDate] = useState('all');
   const [selectedSport, setSelectedSport] = useState<SportCategoryId>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const dateMatches = (dateKey?: string) =>
     selectedDate === 'all' || dateKey === selectedDate;
   const sportMatches = (sport: SportCategoryId) =>
     selectedSport === 'all' || sport === selectedSport;
+  const searchMatches = (...fields: Array<string | undefined>) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return fields.some((f) => (f ?? '').toLowerCase().includes(q));
+  };
 
   const filteredUpcoming = upcomingMatches.filter(
-    (match) => dateMatches(match.dateKey) && sportMatches(match.sport)
+    (match) =>
+      dateMatches(match.dateKey) &&
+      sportMatches(match.sport) &&
+      searchMatches(match.homeTeam, match.awayTeam, match.league, match.venue)
   );
   const filteredScheduled = scheduledEvents.filter(
-    (ev) => dateMatches(ev.dateKey) && sportMatches(ev.sport)
+    (ev) =>
+      dateMatches(ev.dateKey) &&
+      sportMatches(ev.sport) &&
+      searchMatches(ev.homeTeam, ev.awayTeam, ev.league, ev.channel)
   );
   const hasResults = filteredUpcoming.length > 0 || filteredScheduled.length > 0;
 
@@ -66,6 +78,28 @@ export const FixturesView: React.FC<FixturesViewProps> = ({
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Team / league search */}
+      <div className="relative">
+        <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search teams, leagues, or channels (e.g. Arsenal, Asia Cup)…"
+          className="neu-inset w-full rounded-full pl-10 pr-10 py-2.5 text-sm text-slate-900 focus:outline-none"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            aria-label="Clear search"
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-slate-400 hover:text-[#1D6BFF] flex items-center justify-center cursor-pointer"
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       {/* Horizontal Neumorphic Date Scroller */}
@@ -127,13 +161,16 @@ export const FixturesView: React.FC<FixturesViewProps> = ({
       {!hasResults ? (
         <div className="neu-surface rounded-[24px] p-8 text-center">
           <p className="font-display font-bold text-slate-900">
-            No fixtures found for this date and sport
+            {searchQuery.trim()
+              ? `No fixtures match “${searchQuery.trim()}” with these filters`
+              : 'No fixtures found for this date and sport'}
           </p>
           <button
             type="button"
             onClick={() => {
               setSelectedDate('all');
               setSelectedSport('all');
+              setSearchQuery('');
             }}
             className="mt-3 rounded-full bg-[#1D6BFF] text-white text-xs font-bold px-4 py-2 cursor-pointer shadow-sm"
           >

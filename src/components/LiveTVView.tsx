@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Search } from 'lucide-react';
 import { LiveMatch, SportCategoryId, TVChannel } from '../types/sports';
 import type { AdsSettings } from '../types/iptv';
 import { ChannelBadge } from './ChannelBadge';
@@ -20,6 +20,7 @@ export const LiveTVView: React.FC<LiveTVViewProps> = ({
   ads,
 }) => {
   const [sportFilter, setSportFilter] = useState<SportCategoryId>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [expandedFeatured, setExpandedFeatured] = useState(false);
   const [expandedRecent, setExpandedRecent] = useState(false);
   const [expandedPopular, setExpandedPopular] = useState(false);
@@ -33,10 +34,19 @@ export const LiveTVView: React.FC<LiveTVViewProps> = ({
     return () => mq.removeEventListener('change', update);
   }, []);
 
-  const filtered =
-    sportFilter === 'all'
-      ? channels
-      : channels.filter((ch) => ch.sport === sportFilter);
+  const filtered = channels.filter(
+    (ch) =>
+      (sportFilter === 'all' || ch.sport === sportFilter) &&
+      (() => {
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return true;
+        return (
+          ch.name.toLowerCase().includes(q) ||
+          (ch.currentShow ?? '').toLowerCase().includes(q) ||
+          (ch.shortCode ?? '').toLowerCase().includes(q)
+        );
+      })(),
+  );
 
   // Channels explicitly curated into the popular shelf by admin.
   const curatedPopular = filtered.filter((ch) => ch.shelf === 'popular');
@@ -107,6 +117,28 @@ export const LiveTVView: React.FC<LiveTVViewProps> = ({
         })}
       </div>
 
+      {/* Channel search */}
+      <div className="relative">
+        <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search channels (e.g. Sky Sports, Willow, beIN)…"
+          className="neu-inset w-full rounded-full pl-10 pr-10 py-2.5 text-sm text-slate-900 focus:outline-none"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            aria-label="Clear search"
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-slate-400 hover:text-[#1D6BFF] flex items-center justify-center cursor-pointer"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
       {/* Featured Channels Shelf */}
       {featuredChannelsFull.length > 0 && (
         <ChannelShelf
@@ -150,11 +182,16 @@ export const LiveTVView: React.FC<LiveTVViewProps> = ({
       {featuredChannelsFull.length === 0 && recentChannelsFull.length === 0 && popularChannels.length === 0 && (
         <div className="rounded-[24px] bg-[#EEF4FF] p-8 text-center border border-white/80 shadow-[6px_6px_16px_rgba(163,189,226,0.45),-6px_-6px_16px_rgba(255,255,255,0.92)]">
           <p className="font-display font-bold text-slate-900 text-sm">
-            No live TV channels in this category right now
+            {searchQuery.trim()
+              ? `No channels match “${searchQuery.trim()}” in this category`
+              : 'No live TV channels in this category right now'}
           </p>
           <button
             type="button"
-            onClick={() => setSportFilter('all')}
+            onClick={() => {
+              setSportFilter('all');
+              setSearchQuery('');
+            }}
             className="mt-3 rounded-full bg-[#1D6BFF] text-white font-display font-bold text-xs px-4 py-2 cursor-pointer shadow-sm"
           >
             Show All Channels
