@@ -1,15 +1,23 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { CrestId, SportCategoryId } from '../types/sports';
 
-export const SportyLiveLogo: React.FC<{ className?: string }> = ({ className = 'w-9 h-9' }) => (
+export const SportyLiveLogo: React.FC<{ className?: string }> = ({ className = 'w-9 h-9' }) => {
+  // The logo mounts twice (desktop sidebar + mobile header). Shared gradient
+  // ids would make the mobile instance resolve into the desktop one's defs —
+  // which sits inside a display:none subtree that mobile engines refuse to
+  // paint, leaving the icon white/blank. Unique ids per instance fix that.
+  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '');
+  const blueId = `sl-blue-${uid}`;
+  const orangeId = `sl-orange-${uid}`;
+  return (
   <svg viewBox="0 0 48 48" fill="none" className={className} aria-hidden="true">
     <defs>
-      <linearGradient id="sl-blue" x1="6" y1="6" x2="36" y2="34" gradientUnits="userSpaceOnUse">
+      <linearGradient id={blueId} x1="6" y1="6" x2="36" y2="34" gradientUnits="userSpaceOnUse">
         <stop offset="0%" stopColor="#38BDF8" />
         <stop offset="55%" stopColor="#1D6BFF" />
         <stop offset="100%" stopColor="#1E40AF" />
       </linearGradient>
-      <linearGradient id="sl-orange" x1="8" y1="38" x2="42" y2="20" gradientUnits="userSpaceOnUse">
+      <linearGradient id={orangeId} x1="8" y1="38" x2="42" y2="20" gradientUnits="userSpaceOnUse">
         <stop offset="0%" stopColor="#F97316" />
         <stop offset="60%" stopColor="#FB923C" />
         <stop offset="100%" stopColor="#FACC15" />
@@ -18,12 +26,12 @@ export const SportyLiveLogo: React.FC<{ className?: string }> = ({ className = '
     {/* Outer rounded play frame */}
     <path
       d="M11 8.8C11 6.4 13.7 5 15.7 6.3L38.8 20.5C40.7 21.7 40.7 24.5 38.8 25.7L15.7 39.9C13.7 41.2 11 39.8 11 37.4V8.8Z"
-      fill="url(#sl-blue)"
+      fill={`url(#${blueId})`}
     />
     {/* Orange dynamic lower swoosh */}
     <path
       d="M11 32.5C15.5 34.5 22.5 32.8 39.4 22.2C40.5 23.4 40.3 25.1 38.8 26L15.7 40.2C13.7 41.5 11 40.1 11 37.7V32.5Z"
-      fill="url(#sl-orange)"
+      fill={`url(#${orangeId})`}
     />
     {/* Crisp inner white play triangle */}
     <path
@@ -31,7 +39,8 @@ export const SportyLiveLogo: React.FC<{ className?: string }> = ({ className = '
       fill="#FFFFFF"
     />
   </svg>
-);
+  );
+};
 
 export const SportCategoryIcon: React.FC<{
   sport: SportCategoryId | 'more';
