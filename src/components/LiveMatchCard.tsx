@@ -49,10 +49,12 @@ function formatCountdown(kickoffAt: string, nowMs: number): string {
   const hours = Math.floor((remainingSeconds % 86_400) / 3_600);
   const minutes = Math.floor((remainingSeconds % 3_600) / 60);
   const seconds = remainingSeconds % 60;
-  if (days > 0) return `Starts in ${days}d ${hours}h`;
-  if (hours > 0) return `Starts in ${hours}h ${minutes}m`;
-  if (minutes > 0) return `Starts in ${minutes}m ${seconds}s`;
-  return `Starts in ${seconds}s`;
+  // Time part only — the chip renders its own 'Starts in ' prefix (hidden on
+  // very narrow screens so the minutes never get cut off).
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
 }
 
 export const LiveMatchCard: React.FC<LiveMatchCardProps> = ({
@@ -221,11 +223,16 @@ export const LiveMatchCard: React.FC<LiveMatchCardProps> = ({
               {isUpcoming ? 'UPCOMING' : 'LIVE'}
             </span>
             {isUpcoming ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-950/60 backdrop-blur-sm px-2.5 py-0.5 text-[11px] font-semibold text-white tabular-nums truncate" title={match.kickoffLabel}>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-950/60 backdrop-blur-sm px-2.5 py-0.5 text-[11px] font-semibold text-white tabular-nums whitespace-nowrap" title={match.kickoffLabel}>
                 <Clock className="w-3.5 h-3.5 text-slate-200 shrink-0" />
-                <span className="truncate">
-                  {countdownLabel || match.kickoffLabel || 'Kickoff soon'}
-                </span>
+                {countdownLabel ? (
+                  <>
+                    <span className="hidden min-[430px]:inline">Starts in </span>
+                    {countdownLabel}
+                  </>
+                ) : (
+                  <>{match.kickoffLabel || 'Kickoff soon'}</>
+                )}
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-950/60 backdrop-blur-sm px-2.5 py-0.5 text-[11px] font-semibold text-white tabular-nums">
@@ -288,7 +295,7 @@ export const LiveMatchCard: React.FC<LiveMatchCardProps> = ({
               crest={match.homeCrest}
               className="w-14 h-14 sm:w-16 sm:h-16 drop-shadow-[0_6px_14px_rgba(0,0,0,0.45)]"
             />
-            <span className="mt-1.5 font-display font-bold text-[13px] sm:text-base text-white tracking-tight drop-shadow-sm truncate max-w-full">
+            <span className="mt-1.5 font-display font-bold text-[13px] sm:text-base text-white tracking-tight drop-shadow-sm leading-tight line-clamp-2 break-words max-w-full">
               {match.homeTeam}
             </span>
           </div>
@@ -306,7 +313,7 @@ export const LiveMatchCard: React.FC<LiveMatchCardProps> = ({
               crest={match.awayCrest}
               className="w-14 h-14 sm:w-16 sm:h-16 drop-shadow-[0_6px_14px_rgba(0,0,0,0.45)]"
             />
-            <span className="mt-1.5 font-display font-bold text-[13px] sm:text-base text-white tracking-tight drop-shadow-sm truncate max-w-full">
+            <span className="mt-1.5 font-display font-bold text-[13px] sm:text-base text-white tracking-tight drop-shadow-sm leading-tight line-clamp-2 break-words max-w-full">
               {match.awayTeam}
             </span>
           </div>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { CrestId, SportCategoryId } from '../types/sports';
 
 export const SportyLiveLogo: React.FC<{ className?: string }> = ({ className = 'w-9 h-9' }) => (
@@ -181,16 +181,18 @@ export const TeamCrest: React.FC<{ crest: string; className?: string }> = ({
   className = 'w-12 h-12',
 }) => {
   // Logo URLs (admin events) render as images instead of built-in SVG crests.
-  if (/^(https?:\/\/|data:image\/)/i.test(crest)) {
+  // A broken URL (404, dead CDN, blocked hotlink) falls back to the generic
+  // monogram badge below instead of leaving an invisible hole.
+  const [imgFailed, setImgFailed] = useState(false);
+  const isUrl = /^(https?:\/\/|data:image\/)/i.test(crest);
+  if (isUrl && !imgFailed) {
     return (
       <img
         src={crest}
         alt="Team logo"
         loading="lazy"
         className={`${className} object-contain`}
-        onError={(e) => {
-          (e.currentTarget as HTMLImageElement).style.visibility = 'hidden';
-        }}
+        onError={() => setImgFailed(true)}
       />
     );
   }
@@ -451,7 +453,13 @@ export const TeamCrest: React.FC<{ crest: string; className?: string }> = ({
       );
   }
   // Unknown / dynamic crest (IPTV-imported teams): generic monogram disc.
-  const monogram = (crest || '?')
+  // A failed logo URL falls back here too — derive the label from the last
+  // URL path segment (e.g. .../teamlogos/afg.png → “AFG”).
+  const source = isUrl
+    ? crest.split(/[?#]/)[0].split('/').filter(Boolean).pop() ?? ''
+    : crest;
+  const monogram = (source || '?')
+    .replace(/\.[a-z0-9]+$/i, '')
     .replace(/[^A-Za-z0-9 ]/g, ' ')
     .trim()
     .split(/\s+/)
