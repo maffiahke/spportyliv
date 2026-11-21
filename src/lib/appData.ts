@@ -185,8 +185,8 @@ export function adminUpcomingToUpcomingEvent(ev: AdminUpcomingEvent): UpcomingEv
   };
 }
 
-/** Matches this close to kickoff are promoted to the live-style Upcoming cards. */
-const UPCOMING_WINDOW_MS = 4 * 60 * 60 * 1000;
+/** Events within 2h of kickoff are promoted to the live-style Upcoming cards. */
+const UPCOMING_WINDOW_MS = 2 * 60 * 60 * 1000;
 /** A match stays LIVE for this long after kickoff; after that it is ENDED. */
 export const LIVE_WINDOW_MS = 2 * 60 * 60 * 1000;
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
