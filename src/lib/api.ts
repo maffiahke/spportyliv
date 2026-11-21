@@ -285,6 +285,8 @@ export interface PushConfig {
   publicKey: string;
   prefs: PushPrefs;
   subscriptions: number;
+  /** True when ONESIGNAL_APP_ID + ONESIGNAL_REST_API_KEY are set server-side. */
+  onesignalReady: boolean;
 }
 
 export interface PushResult {
@@ -321,6 +323,18 @@ export function sendTestPush(): Promise<PushResult> {
     method: 'POST',
     headers: authHeaders(),
   }).then((r) => j<PushResult>(r));
+}
+
+export function sendBroadcastPush(payload: {
+  title: string;
+  body: string;
+  url?: string;
+}): Promise<PushAlertResult> {
+  return fetch('/api/admin/push/broadcast', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  }).then((r) => j<PushAlertResult>(r));
 }
 
 export function updatePushPrefs(patch: Partial<PushPrefs>): Promise<PushPrefs> {

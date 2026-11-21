@@ -52,6 +52,7 @@ import {
   removeSubscription,
   savePushPrefs,
   sendEventAlert,
+  sendOneSignalPush,
   sendPush,
 } from './push.js';
 
@@ -1539,6 +1540,9 @@ export async function handleApiRequest(
       publicKey: getVapidPublicKey(),
       prefs: getPushPrefs(),
       subscriptions: getSubscriptionCount(),
+      onesignalReady: Boolean(
+        (process.env.ONESIGNAL_APP_ID ?? '').trim() && (process.env.ONESIGNAL_REST_API_KEY ?? '').trim(),
+      ),
     });
     return true;
   }
@@ -1581,6 +1585,43 @@ export async function handleApiRequest(
       kind: 'test',
     });
     sendJson(res, 200, result);
+    return true;
+  }
+
+  /** Manual broadcast to all site users (OneSegment viewers + admin devices). */
+  if (path === '/api/admin/push/broadcast' && method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req)) as {
+        title?: string;
+        body?: string;
+        url?: string;
+      };
+      const title = String(body.title ?? '').trim();
+      const text = String(body.body ?? '').trim();
+      if (!title || !text) {
+        sendJson(res, 400, { error: 'Title and message are required' });
+        return true;
+      }
+      const payload = {
+        title,
+        body: text,
+        url: String(body.url ?? '').trim() || '/',
+        tag: `broadcast-${Date.now()}`,
+        kind: 'event' as const,
+      };
+      const emptyVapid = { sent: 0, failed: 0, removed: 0, configured: false };
+      const [vapid, onesignal] = await Promise.all([
+        sendPush(payload).catch(() => emptyVapid),
+        sendOneSignalPush(payload).catch(() => ({ ok: false, configured: false })),
+      ]);
+      sendJson(res, 200, {
+        ok: vapid.sent > 0 || onesignal.ok,
+        vapid,
+        onesignal,
+      });
+    } catch (err) {
+      sendJson(res, 400, { error: (err as Error).message });
+    }
     return true;
   }
 

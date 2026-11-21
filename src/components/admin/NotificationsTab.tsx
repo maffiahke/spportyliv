@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Info,
   Lock,
+  Megaphone,
   Radio,
   RefreshCw,
   Send,
@@ -17,6 +18,7 @@ import {
   fetchPushConfig,
   getAdminToken,
   PushConfig,
+  sendBroadcastPush,
   sendTestPush,
   updatePushPrefs,
 } from '../../lib/api';
@@ -27,11 +29,31 @@ import {
   notificationPermission,
   pushSupport,
 } from '../../lib/push';
-import { NeonToggle, Spinner } from './ui';
+import { NeonField, NeonInput, NeonSelect, NeonToggle, Spinner } from './ui';
 
 interface NotificationsTabProps {
   onToast: (msg: string, error?: boolean) => void;
 }
+
+/** Broadcast copy presets: pick one to pre-fill, then tweak. */
+const BROADCAST_PRESETS: Record<string, { title: string; body: string; url: string }> = {
+  custom: { title: '', body: '', url: '/' },
+  live: {
+    title: 'We are LIVE right now',
+    body: 'A match is underway on SportyLive — tap to watch.',
+    url: '/',
+  },
+  announce: {
+    title: 'What\u2019s new on SportyLive',
+    body: 'Fresh fixtures and channels just landed — take a look.',
+    url: '/?tab=fixtures',
+  },
+  maintenance: {
+    title: 'Scheduled maintenance',
+    body: 'SportyLive will be briefly unavailable for maintenance. Back soon!',
+    url: '/',
+  },
+};
 
 const PrefRow: React.FC<{
   icon: React.ElementType;
@@ -142,6 +164,50 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({ onToast }) =
     } catch (err) {
       setConfig(prev);
       onToast((err as Error).message, true);
+    }
+  };
+
+  // ── Broadcast to site users ──
+  const [bcPreset, setBcPreset] = useState('custom');
+  const [bcTitle, setBcTitle] = useState('');
+  const [bcBody, setBcBody] = useState('');
+  const [bcUrl, setBcUrl] = useState('/');
+  const [bcBusy, setBcBusy] = useState(false);
+
+  const pickPreset = (key: string) => {
+    setBcPreset(key);
+    const preset = BROADCAST_PRESETS[key] ?? BROADCAST_PRESETS.custom;
+    setBcTitle(preset.title);
+    setBcBody(preset.body);
+    setBcUrl(preset.url);
+  };
+
+  const broadcast = async () => {
+    if (bcBusy) return;
+    if (!bcTitle.trim() || !bcBody.trim()) {
+      onToast('Add a title and a message first', true);
+      return;
+    }
+    setBcBusy(true);
+    try {
+      const res = await sendBroadcastPush({
+        title: bcTitle.trim(),
+        body: bcBody.trim(),
+        url: bcUrl.trim() || '/',
+      });
+      const parts: string[] = [];
+      if (res.onesignal.configured) {
+        parts.push(res.onesignal.ok ? 'sent to all OneSignal subscribers' : 'OneSignal failed');
+      } else {
+        parts.push('OneSignal not configured (site users)');
+      }
+      if (res.vapid.configured) parts.push(`${res.vapid.sent} admin device${res.vapid.sent === 1 ? '' : 's'}`);
+      if (res.ok) onToast(`Broadcast delivered — ${parts.join(' · ')}`);
+      else onToast(`Broadcast failed — ${parts.join(' · ')}`, true);
+    } catch (err) {
+      onToast((err as Error).message, true);
+    } finally {
+      setBcBusy(false);
     }
   };
 
@@ -266,8 +332,69 @@ export const NotificationsTab: React.FC<NotificationsTabProps> = ({ onToast }) =
       </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
-        {/* Preferences */}
+        {/* Broadcast to site users */}
         <section className="neon-card p-4 sm:p-5 xl:col-span-7 space-y-3">
+          <h3 className="font-display font-extrabold text-sm text-slate-900 flex items-center gap-2">
+            <Megaphone className="w-4 h-4 text-[#1D6BFF]" />
+            Send broadcast to site users
+          </h3>
+          <p className="text-[10.5px] text-slate-500">
+            Pushes a notification to every subscriber who opted in on the site (OneSignal) and your
+            admin devices. Tapping it opens the link below.
+          </p>
+          <NeonField label="Preset">
+            <NeonSelect value={bcPreset} onChange={(e) => pickPreset(e.target.value)}>
+              <option value="custom">Custom</option>
+              <option value="live">We are live now</option>
+              <option value="announce">Announcement / what's new</option>
+              <option value="maintenance">Scheduled maintenance</option>
+            </NeonSelect>
+          </NeonField>
+          <NeonField label="Title">
+            <NeonInput
+              value={bcTitle}
+              onChange={(e) => setBcTitle(e.target.value)}
+              maxLength={60}
+              placeholder="e.g. Man City vs Arsenal is LIVE"
+            />
+          </NeonField>
+          <NeonField label="Message">
+            <textarea
+              value={bcBody}
+              onChange={(e) => setBcBody(e.target.value)}
+              rows={3}
+              maxLength={180}
+              placeholder="Short message shown in the notification"
+              className="w-full rounded-xl bg-[#EEF4FF] border border-white/85 shadow-[inset_2px_2px_6px_rgba(163,189,226,0.4),inset_-2px_-2px_6px_rgba(255,255,255,0.9)] p-3 text-[11px] text-slate-800 outline-none focus:border-[#1D6BFF]/60"
+            />
+          </NeonField>
+          <NeonField label="Open on tap (optional)">
+            <NeonInput
+              value={bcUrl}
+              onChange={(e) => setBcUrl(e.target.value)}
+              placeholder="/"
+            />
+          </NeonField>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void broadcast()}
+              disabled={bcBusy}
+              className="neon-btn-accent px-4 py-2 text-[11px] disabled:opacity-50"
+            >
+              {bcBusy ? <Spinner /> : <Send className="w-3.5 h-3.5" />}
+              Send broadcast
+            </button>
+            <span className="text-[10px] text-slate-500">
+              {config && !config.onesignalReady
+                ? 'OneSignal is not configured — only admin devices will get this.'
+                : ''}
+            </span>
+          </div>
+        </section>
+
+        {/* Preferences */}
+        <section className="neon-card p-4 sm:p-5 xl:col-span-5 space-y-3">
           <h3 className="font-display font-extrabold text-sm text-slate-900 flex items-center gap-2">
             <RefreshCw className="w-4 h-4 text-[#1D6BFF]" />
             Alert Preferences
