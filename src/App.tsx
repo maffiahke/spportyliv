@@ -14,7 +14,6 @@ import {
 import { SportCategoryIcon, SportyLiveLogo } from './components/IconsAndCrests';
 import {
   EXTRA_SPORT_CATEGORIES,
-  INITIAL_NOTIFICATIONS,
   PRIMARY_SPORT_CATEGORIES,
 } from './data/sportsData';
 import {
@@ -77,9 +76,9 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(
-    INITIAL_NOTIFICATIONS
-  );
+  // In-app notification tray starts empty — entries come from real activity
+  // (reminders, new events), never from mock data.
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   // Match Reminders & Active Player Screen + PiP Playback State
   const [notifiedIds, setNotifiedIds] = useState<string[]>([]);
@@ -489,7 +488,12 @@ export default function App() {
                   )}
                 </div>
                 <div className="space-y-2.5 max-h-72 overflow-y-auto">
-                  {notifications.map((item) => (
+                  {notifications.length === 0 ? (
+                    <p className="py-6 text-center text-xs text-slate-500">
+                      No alerts yet — you'll see reminders and live event alerts here.
+                    </p>
+                  ) : (
+                    notifications.map((item) => (
                     <button
                       key={item.id}
                       type="button"
@@ -520,7 +524,8 @@ export default function App() {
                       </div>
                       <p className="mt-0.5 text-xs text-slate-600">{item.detail}</p>
                     </button>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             )}

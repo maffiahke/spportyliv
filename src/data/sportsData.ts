@@ -510,29 +510,3 @@ export const TV_CHANNELS: TVChannel[] = [
   },
 ];
 
-export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: 'notif-1',
-    title: 'El Clásico is LIVE',
-    detail: 'Real Madrid 2 - 1 Barcelona • 2nd Half underway',
-    timeAgo: 'Just now',
-    unread: true,
-    matchId: 'live-clasico',
-  },
-  {
-    id: 'notif-2',
-    title: 'Heavyweight Main Event',
-    detail: 'Fury vs Usyk entering Round 10 on FightNight Arena',
-    timeAgo: '4m ago',
-    unread: true,
-    matchId: 'live-boxing',
-  },
-  {
-    id: 'notif-3',
-    title: 'F1 Night Race Green Flag',
-    detail: 'Verstappen leads Leclerc by 1.4s in Las Vegas',
-    timeAgo: '12m ago',
-    unread: true,
-    matchId: 'live-f1',
-  },
-];
