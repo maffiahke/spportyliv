@@ -254,9 +254,12 @@ export async function sendEventAlert(
 
 export function notifyNewEvent(kind: 'live' | 'upcoming', home: string, away: string, league: string) {
   const prefs = getPushPrefs();
+  const names = `${home} vs ${away}`;
   const payload = {
-    title: kind === 'live' ? 'New live event published' : 'New fixture scheduled',
-    body: `${home} vs ${away}${league ? ` · ${league}` : ''}`,
+    title: kind === 'live' ? `LIVE NOW — ${names}` : `Starting soon — ${names}`,
+    body: `${league ? `${league} — ` : ''}${
+      kind === 'live' ? 'Match is underway — watch it live on SportyLive.' : 'Kickoff soon — watch on SportyLive.'
+    }`,
     tag: `event-${home}-${away}`.toLowerCase().replace(/\s+/g, '-'),
     kind: 'event' as const,
   };
