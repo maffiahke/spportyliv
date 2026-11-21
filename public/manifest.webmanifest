@@ -1,0 +1,29 @@
+{
+  "name": "SportyLive — Live Sports Streaming and Channels",
+  "short_name": "SportyLive",
+  "description": "Live sports streaming and channels",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0A152E",
+  "theme_color": "#0A152E",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
