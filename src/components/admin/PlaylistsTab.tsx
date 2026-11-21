@@ -288,7 +288,7 @@ export const PlaylistsTab: React.FC<PlaylistsTabProps> = ({ playlists, onChanged
                         hidden
                       </span>
                     )}
-                    {pl.autoSync && <span className="neon-badge neon-badge-live">auto sync · 5 min</span>}
+                    {pl.autoSync && <span className="neon-badge neon-badge-live">auto sync · 10 min</span>}
                     {pl.lastError && <span className="neon-badge neon-badge-live">last sync failed</span>}
                   </div>
                   <p className="mt-0.5 text-[10.5px] text-slate-500 truncate">

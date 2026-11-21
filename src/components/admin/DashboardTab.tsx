@@ -273,7 +273,17 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
               No playlists yet — import an M3U to power Live TV.
             </div>
           ) : (
-            playlists.map((p) => (
+            playlists.map((p) => {
+              // Truthful freshness: auto-sync ticks every 10 min on the external
+              // scheduler — anything older than ~25 min means it isn't running.
+              const lastSyncMs = p.lastSyncedAt ? Date.parse(p.lastSyncedAt) : NaN;
+              const ageMin = Number.isFinite(lastSyncMs)
+                ? Math.floor((Date.now() - lastSyncMs) / 60_000)
+                : null;
+              const stale = p.autoSync && (ageMin === null || ageMin > 25);
+              const ageLabel =
+                ageMin === null ? 'never synced' : ageMin < 1 ? 'just now' : `${ageMin} min ago`;
+              return (
               <div key={p.id} className="neon-row p-3.5 flex items-center gap-3 flex-wrap">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -282,10 +292,18 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                     </span>
                     <span className="neon-badge">{p.channelCount} ch</span>
                     {p.autoSync && (
-                      <span className="neon-badge neon-badge-live">auto · 5 min</span>
+                      <span className="neon-badge neon-badge-live">auto · 10 min</span>
                     )}
                     {p.lastError ? (
                       <span className="neon-badge neon-badge-live">error</span>
+                    ) : stale ? (
+                      <span
+                        className="neon-badge inline-flex items-center gap-1"
+                        title="Auto-sync has not run recently — check the scheduler (GitHub Actions) or press Sync now"
+                      >
+                        <AlertTriangle className="w-3 h-3 text-amber-600" />
+                        stale{ageMin !== null ? ` · ${ageMin}m` : ''}
+                      </span>
                     ) : (
                       <span className="neon-badge inline-flex items-center gap-1">
                         <CheckCircle2 className="w-3 h-3 text-emerald-600" />
@@ -296,7 +314,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                   <p className="mt-0.5 text-[10.5px] text-slate-500 truncate flex items-center gap-1">
                     <Clock className="w-3 h-3" />
                     {p.lastSyncedAt
-                      ? `last sync ${new Date(p.lastSyncedAt).toLocaleTimeString()}`
+                      ? `last sync ${new Date(p.lastSyncedAt).toLocaleTimeString()} (${ageLabel})`
                       : 'never synced'}
                     {p.lastError ? ` · ${(p.lastError || '').slice(0, 60)}` : ''}
                   </p>
@@ -311,7 +329,8 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                   Sync now
                 </button>
               </div>
-            ))
+              );
+            })
           )}
         </div>
 
