@@ -199,6 +199,28 @@ export function deleteEvent(id: string): Promise<void> {
   );
 }
 
+export interface MatchImportStats {
+  ok: boolean;
+  format: 'json' | 'm3u';
+  matched: number;
+  liveCreated: number;
+  upcomingCreated: number;
+  updated: number;
+  skipped: number;
+}
+
+export function importMatches(payload: {
+  content?: string;
+  sourceUrl?: string;
+  format?: 'json' | 'm3u';
+}): Promise<MatchImportStats> {
+  return fetch('/api/admin/events/import', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  }).then((r) => j<MatchImportStats>(r));
+}
+
 /* ---------------- Banners ---------------- */
 
 export function createBanner(payload: Partial<AdminBanner>): Promise<AdminBanner> {

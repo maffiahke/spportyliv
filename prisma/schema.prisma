@@ -76,6 +76,7 @@ model LiveEvent {
   viewers     String?
   quality     String  @default("HD")
   streamUrl   String  @default("") @map("stream_url")
+  customStreams Json   @default("[]") @map("custom_streams")
   headers     Json    @default("{}")
   homeLogoUrl String? @map("home_logo_url")
   awayLogoUrl String? @map("away_logo_url")
@@ -99,6 +100,7 @@ model UpcomingEvent {
   dateKey   String  @default("") @map("date_key")
   time      String  @default("")
   streamUrl String? @map("stream_url")
+  customStreams Json @default("[]") @map("custom_streams")
   headers   Json    @default("{}")
   status    String?
   enabled   Boolean @default(true)

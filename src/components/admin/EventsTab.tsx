@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { CalendarClock, Check, Pencil, Plus, Radio, RotateCcw, Save, Trash2, X } from 'lucide-react';
+import { CalendarClock, Check, Pencil, Plus, Radio, RotateCcw, Save, Trash2, Upload, X } from 'lucide-react';
 import {
   AdminEventStatus,
   AdminLiveEvent,
@@ -8,7 +8,7 @@ import {
   IptvSport,
   StreamHeaders,
 } from '../../types/iptv';
-import { createEvent, deleteEvent, updateEvent } from '../../lib/api';
+import { createEvent, deleteEvent, importMatches, updateEvent } from '../../lib/api';
 import { HeadersEditor, NeonField, NeonInput, NeonSelect, NeonToggle } from './ui';
 
 interface EventsTabProps {
@@ -268,6 +268,9 @@ export const EventsTab: React.FC<EventsTabProps> = ({
           </span>
         )}
       </div>
+
+      {/* Match feed import (JSON / M3U) */}
+      <ImportMatchesCard onChanged={onChanged} onToast={onToast} />
 
       {/* Create form */}
       <section className="neon-card neon-card-accent p-5">
@@ -565,5 +568,134 @@ export const EventsTab: React.FC<EventsTabProps> = ({
         )}
       </section>
     </div>
+  );
+};
+
+/** Paste-or-URL importer for match feeds (JSON or M3U with "A VS B" names). */
+const ImportMatchesCard: React.FC<{
+  onChanged: () => void;
+  onToast: (msg: string, error?: boolean) => void;
+}> = ({ onChanged, onToast }) => {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [content, setContent] = useState('');
+  const [sourceUrl, setSourceUrl] = useState('');
+  const [format, setFormat] = useState<'auto' | 'json' | 'm3u'>('auto');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const run = async () => {
+    if (busy) return;
+    if (!content.trim() && !sourceUrl.trim()) {
+      onToast('Paste match data or provide a feed URL', true);
+      return;
+    }
+    setBusy(true);
+    try {
+      const stats = await importMatches({
+        content: content.trim() || undefined,
+        sourceUrl: sourceUrl.trim() || undefined,
+        format: format === 'auto' ? undefined : format,
+      });
+      onToast(
+        `Imported ${stats.matched} matches (${stats.liveCreated} live, ${stats.upcomingCreated} fixtures, ${stats.updated} updated)` +
+          (stats.skipped ? `, ${stats.skipped} duplicates skipped` : ''),
+      );
+      setContent('');
+      onChanged();
+    } catch (err) {
+      onToast((err as Error).message, true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pickFile = async (file: File | undefined) => {
+    if (!file) return;
+    setContent(await file.text());
+  };
+
+  if (!open) {
+    return (
+      <div className="neon-card p-4 flex items-center justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <h3 className="font-display font-extrabold text-sm text-slate-900 flex items-center gap-2">
+            <Upload className="w-4 h-4 text-[#1D6BFF]" />
+            Import Matches (JSON / M3U)
+          </h3>
+          <p className="mt-0.5 text-[10.5px] text-slate-500">
+            Paste a match feed or drop a URL. JSON matches use team1/team2 + stream_ads; M3U names use “TEAM1 VS TEAM2”.
+            Stream lists become failover sources automatically.
+          </p>
+        </div>
+        <button type="button" onClick={() => setOpen(true)} className="neon-btn px-4 py-2 text-xs shrink-0">
+          <Upload className="w-3.5 h-3.5" />
+          Import
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <section className="neon-card p-5 space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h3 className="font-display font-extrabold text-sm text-slate-900">Import Matches</h3>
+        <button type="button" onClick={() => setOpen(false)} className="neon-btn-ghost px-3 py-1.5 text-[11px]">
+          <X className="w-3.5 h-3.5" />
+          Close
+        </button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <NeonField label="Format">
+          <NeonSelect value={format} onChange={(e) => setFormat(e.target.value as typeof format)}>
+            <option value="auto">Auto-detect</option>
+            <option value="json">JSON</option>
+            <option value="m3u">M3U</option>
+          </NeonSelect>
+        </NeonField>
+        <NeonField label="Feed URL (optional)" className="md:col-span-2">
+          <NeonInput
+            value={sourceUrl}
+            onChange={(e) => setSourceUrl(e.target.value)}
+            placeholder="https://example.com/matches.json"
+          />
+        </NeonField>
+      </div>
+      <NeonField label="Paste JSON or M3U content">
+        <textarea
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          rows={7}
+          spellCheck={false}
+          placeholder={'[\n  {\n    "team1": "Manchester City",\n    "team2": "Fulham",\n    "date": "2026-11-21",\n    "time": "06:30 PM",\n    "stream_ads": [{ "url": "http://…/master.m3u8", "user_agent": "Dalvik/2.1.0" }]\n  }\n]'}
+          className="w-full rounded-xl bg-[#EEF4FF] border border-white/85 shadow-[inset_2px_2px_6px_rgba(163,189,226,0.4),inset_-2px_-2px_6px_rgba(255,255,255,0.9)] p-3 text-[11px] font-mono text-slate-800 outline-none focus:border-[#1D6BFF]/60"
+        />
+      </NeonField>
+      <div className="flex items-center gap-2 flex-wrap">
+        <button type="button" disabled={busy} onClick={run} className="neon-btn px-5 py-2 text-xs disabled:opacity-60">
+          {busy ? 'Importing…' : 'Import matches'}
+        </button>
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="neon-btn-ghost px-3 py-2 text-[11px]"
+        >
+          <Upload className="w-3.5 h-3.5" />
+          Load file (.json / .m3u / .m3u8)
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json,.m3u,.m3u8,.txt,application/json"
+          className="hidden"
+          onChange={(e) => {
+            void pickFile(e.target.files?.[0]);
+            e.target.value = '';
+          }}
+        />
+        <span className="text-[10.5px] text-slate-500">
+          Re-importing the same teams + date updates streams instead of duplicating.
+        </span>
+      </div>
+    </section>
   );
 };

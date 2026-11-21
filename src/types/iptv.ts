@@ -81,6 +81,9 @@ export interface AdminLiveEvent {
   /** Ordered failover list of channel references: first is primary, the rest are
    * used when earlier streams fail. channelIds[0] mirrors channelId. */
   channelIds?: string[];
+  /** Direct stream sources (e.g. imported matches): played after channel sources
+   * in the listed order. */
+  customStreams?: MatchStream[];
   /** Publication state shown to viewers. */
   status?: AdminEventStatus;
   /** Event date (ISO yyyy-mm-dd) and kickoff time. */
@@ -102,8 +105,19 @@ export interface AdminUpcomingEvent {
   time: string;
   streamUrl?: string;
   headers: StreamHeaders;
+  /** Direct failover sources for imported matches (first mirrors streamUrl). */
+  customStreams?: MatchStream[];
   status?: AdminEventStatus;
   enabled: boolean;
+}
+
+/** A direct stream source attached to an event (imported matches, custom URLs). */
+export interface MatchStream {
+  title?: string;
+  quality?: string;
+  url: string;
+  userAgent?: string;
+  referer?: string;
 }
 
 /** Admin-managed hero banner slide. */

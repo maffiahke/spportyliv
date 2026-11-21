@@ -36,6 +36,12 @@ import {
   type UserSessionRecord,
 } from './store.js';
 import {
+  detectMatchFormat,
+  importMatchesIntoStore,
+  parseMatchesFromJson,
+  parseMatchesFromM3U,
+} from './matchImport.js';
+import {
   addSubscription,
   getPushPrefs,
   getSubscriptionCount,
@@ -1187,6 +1193,42 @@ export async function handleApiRequest(
   // ---------------- Live events ----------------
   if (path === '/api/admin/events' && method === 'GET') {
     sendJson(res, 200, { liveEvents: store.liveEvents, upcomingEvents: store.upcomingEvents });
+    return true;
+  }
+
+  // ---------------- Match import (JSON / M3U feeds) ----------------
+  if (path === '/api/admin/events/import' && method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req)) as {
+        content?: string;
+        sourceUrl?: string;
+        format?: string;
+      };
+      let text = (body.content ?? '').trim();
+      if (!text && body.sourceUrl) {
+        const res2 = await fetch(body.sourceUrl, {
+          headers: { 'user-agent': 'SportyLive/1.0 (match importer)' },
+          signal: AbortSignal.timeout(30_000),
+          redirect: 'follow',
+        });
+        if (!res2.ok) throw new Error(`HTTP ${res2.status} while fetching match feed`);
+        text = await res2.text();
+      }
+      if (!text) {
+        sendJson(res, 400, { error: 'Paste match JSON/M3U or provide a source URL' });
+        return true;
+      }
+      const format =
+        body.format === 'json' || body.format === 'm3u'
+          ? body.format
+          : detectMatchFormat(text);
+      const matches = format === 'm3u' ? parseMatchesFromM3U(text) : parseMatchesFromJson(JSON.parse(text));
+      const stats = importMatchesIntoStore(store, matches);
+      await saveStore();
+      sendJson(res, 200, { ok: true, format, matched: matches.length, ...stats });
+    } catch (err) {
+      sendJson(res, 400, { error: (err as Error).message });
+    }
     return true;
   }
 

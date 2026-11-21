@@ -6,7 +6,9 @@ import {
   AppData,
   DEFAULT_SITE_SETTINGS,
   IptvChannel,
+  MatchStream,
   SiteSettings,
+  StreamHeaders,
 } from '../types/iptv';
 import {
   HeroSlide,
@@ -28,6 +30,14 @@ const SPORT_THEMES: Record<string, [string, string]> = {
   other: ['#1E293B', '#334155'],
 };
 
+/** StreamHeaders for an imported match stream. */
+function headersFromMatchStream(s: MatchStream): StreamHeaders {
+  const out: StreamHeaders = {};
+  if (s.userAgent) out.userAgent = s.userAgent;
+  if (s.referer) out.referer = s.referer;
+  return out;
+}
+
 export function adminEventToLiveMatch(
   ev: AdminLiveEvent,
   channels: IptvChannel[] = [],
@@ -42,23 +52,21 @@ export function adminEventToLiveMatch(
   ];
   const seenUrls = new Set<string>();
   const streams: NonNullable<LiveMatch['streams']> = [];
+  const pushSource = (url: string, label: string, headers: StreamHeaders, id: string, quality?: string): void => {
+    if (!url || seenUrls.has(url)) return;
+    seenUrls.add(url);
+    streams.push({
+      id,
+      label: quality ? `${label} · ${quality}` : label,
+      url: url.startsWith('/api/iptv/stream') ? url : buildProxiedUrl(url, headers, isHlsUrl(url)),
+    });
+  };
   for (const cid of sourceIds) {
     const ch = channels.find((c) => c.id === cid);
-    if (!ch || seenUrls.has(ch.url)) continue;
-    seenUrls.add(ch.url);
-    streams.push({
-      id: `ch-${ch.id}`,
-      label: ch.name,
-      url: ch.url.startsWith('/api/iptv/stream') ? ch.url : buildProxiedUrl(ch.url, ch.headers, isHlsUrl(ch.url)),
-    });
+    if (ch) pushSource(ch.url, ch.name, ch.headers, `ch-${ch.id}`);
   }
-  const rawUrl = ev.streamUrl;
-  if (rawUrl && !seenUrls.has(rawUrl)) {
-    streams.push({
-      id: 'custom',
-      label: 'Primary stream',
-      url: rawUrl.startsWith('/api/iptv/stream') ? rawUrl : buildProxiedUrl(rawUrl, ev.headers, isHlsUrl(rawUrl)),
-    });
+  for (const [i, s] of (ev.customStreams ?? []).entries()) {
+    pushSource(s.url, s.title || `Stream ${i + 1}`, headersFromMatchStream(s), `cs-${i}`, s.quality);
   }
   const streamUrl = streams[0]?.url ?? '';
   return {
@@ -193,12 +201,23 @@ export function adminUpcomingToLiveMatch(
   kickoff: Date,
 ): LiveMatch {
   const [leftTheme, rightTheme] = SPORT_THEMES[ev.sport] ?? SPORT_THEMES.other;
-  const rawUrl = ev.streamUrl ?? '';
-  const streamUrl = rawUrl
-    ? rawUrl.startsWith('/api/iptv/stream')
-      ? rawUrl
-      : buildProxiedUrl(rawUrl, ev.headers, isHlsUrl(rawUrl))
-    : undefined;
+  // Failover sources for imported matches: the primary first, then the rest.
+  const seenUrls = new Set<string>();
+  const streams: NonNullable<LiveMatch['streams']> = [];
+  const pushSource = (url: string, label: string, headers: StreamHeaders, id: string): void => {
+    if (!url || seenUrls.has(url)) return;
+    seenUrls.add(url);
+    streams.push({
+      id,
+      label,
+      url: url.startsWith('/api/iptv/stream') ? url : buildProxiedUrl(url, headers, isHlsUrl(url)),
+    });
+  };
+  (ev.customStreams ?? []).forEach((s, i) =>
+    pushSource(s.url, s.title || `Stream ${i + 1}`, headersFromMatchStream(s), `cs-${i}`),
+  );
+  pushSource(ev.streamUrl ?? '', 'Primary stream', ev.headers, 'primary');
+  const streamUrl = streams[0]?.url;
   return {
     id: `iptv-up-${ev.id}`,
     sport: ev.sport,
@@ -215,6 +234,7 @@ export function adminUpcomingToLiveMatch(
     quality: 'HD',
     viewers: '',
     videoUrl: streamUrl,
+    streams,
     leftTheme,
     rightTheme,
     venue: ev.league,

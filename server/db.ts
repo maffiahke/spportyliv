@@ -138,6 +138,7 @@ function liveEventRecord(e: AdminLiveEvent) {
     viewers: e.viewers ?? null,
     quality: e.quality,
     streamUrl: e.streamUrl ?? '',
+    customStreams: (e.customStreams ?? []) as unknown as Prisma.InputJsonValue,
     headers: (e.headers ?? {}) as Prisma.InputJsonValue,
     homeLogoUrl: e.homeLogoUrl ?? null,
     awayLogoUrl: e.awayLogoUrl ?? null,
@@ -163,6 +164,12 @@ const liveEventFromRow = (r: LiveEventRow): AdminLiveEvent => ({
   viewers: r.viewers ?? undefined,
   quality: r.quality as AdminLiveEvent['quality'],
   streamUrl: r.streamUrl,
+  customStreams: Array.isArray(r.customStreams)
+    ? (r.customStreams as unknown[]).filter(
+        (x): x is NonNullable<AdminLiveEvent['customStreams']>[number] =>
+          !!x && typeof x === 'object' && typeof (x as { url?: unknown }).url === 'string',
+      )
+    : undefined,
   headers: headersOf(r.headers),
   homeLogoUrl: r.homeLogoUrl ?? undefined,
   awayLogoUrl: r.awayLogoUrl ?? undefined,
@@ -187,6 +194,7 @@ function upcomingEventRecord(e: AdminUpcomingEvent) {
     dateKey: e.dateKey ?? '',
     time: e.time ?? '',
     streamUrl: e.streamUrl ?? null,
+    customStreams: (e.customStreams ?? []) as unknown as Prisma.InputJsonValue,
     headers: (e.headers ?? {}) as Prisma.InputJsonValue,
     status: e.status ?? null,
     enabled: e.enabled !== false,
@@ -203,6 +211,12 @@ const upcomingEventFromRow = (r: UpcomingEventRow): AdminUpcomingEvent => ({
   dateKey: r.dateKey,
   time: r.time,
   streamUrl: r.streamUrl ?? undefined,
+  customStreams: Array.isArray(r.customStreams)
+    ? (r.customStreams as unknown[]).filter(
+        (x): x is NonNullable<AdminUpcomingEvent['customStreams']>[number] =>
+          !!x && typeof x === 'object' && typeof (x as { url?: unknown }).url === 'string',
+      )
+    : undefined,
   headers: headersOf(r.headers),
   status: (r.status as AdminUpcomingEvent['status']) ?? undefined,
   enabled: r.enabled,
