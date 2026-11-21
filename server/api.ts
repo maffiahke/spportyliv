@@ -51,6 +51,7 @@ import {
   notifySyncError,
   removeSubscription,
   savePushPrefs,
+  sendEventAlert,
   sendPush,
 } from './push.js';
 
@@ -1332,6 +1333,56 @@ export async function handleApiRequest(
         notifyNewEvent('live', ev.homeTeam, ev.awayTeam, ev.league);
         sendJson(res, 201, ev);
       }
+    } catch (err) {
+      sendJson(res, 400, { error: (err as Error).message });
+    }
+    return true;
+  }
+
+  /** Manual push alert from the admin Events tab (templates or custom copy). */
+  if (path === '/api/admin/events/notify' && method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req)) as {
+        id?: string;
+        template?: string;
+        title?: string;
+        body?: string;
+      };
+      const id = String(body.id ?? '');
+      const ev =
+        store.liveEvents.find((e) => e.id === id) ??
+        store.upcomingEvents.find((e) => e.id === id);
+      if (!ev) {
+        sendJson(res, 404, { error: 'Event not found' });
+        return true;
+      }
+      const isLive = store.liveEvents.some((e) => e.id === id);
+      const names = `${ev.homeTeam} vs ${ev.awayTeam}`;
+      const league = ev.league ? `${ev.league} — ` : '';
+      const template = String(body.template ?? (isLive ? 'live_now' : 'starting_soon'));
+      const kickoffMs = 'startTimestampMs' in ev && ev.startTimestampMs ? Number(ev.startTimestampMs) : null;
+      let title = String(body.title ?? '').trim();
+      let text = String(body.body ?? '').trim();
+      if (!title && template === 'live_now') {
+        title = `LIVE NOW — ${names}`;
+        text = text || `${league}Match is underway — watch it live on SportyLive.`;
+      } else if (!title && template === 'starting_soon') {
+        title = `Starting soon — ${names}`;
+        if (!text) {
+          text = kickoffMs
+            ? `Kickoff in ${Math.max(1, Math.round((kickoffMs - Date.now()) / 60000))} min — watch on SportyLive.`
+            : `Kickoff soon — watch on SportyLive.`;
+        }
+      } else if (!title) {
+        // Custom copy with the event as the fallback subject.
+        title = isLive ? `LIVE — ${names}` : `Upcoming — ${names}`;
+        text = text || `${league}${isLive ? 'Watch it live' : 'Get ready for kickoff'} on SportyLive.`;
+      }
+      if (!text) {
+        text = isLive ? 'Watch it live on SportyLive.' : 'Watch on SportyLive.';
+      }
+      const result = await sendEventAlert({ id: ev.id, homeTeam: ev.homeTeam, awayTeam: ev.awayTeam }, title, text);
+      sendJson(res, 200, { ok: result.ok, vapid: result.vapid, onesignal: result.onesignal });
     } catch (err) {
       sendJson(res, 400, { error: (err as Error).message });
     }

@@ -221,6 +221,37 @@ export async function sendOneSignalPush(payload: PushPayload): Promise<OneSignal
 
 /* ───────────── Event-driven notifications (respect admin prefs) ───────────── */
 
+export interface EventAlertResult {
+  ok: boolean;
+  vapid: PushResult;
+  onesignal: OneSignalResult;
+}
+
+/**
+ * Manual alert pushed from the admin Events tab: fans out to admin devices
+ * (VAPID) and to all subscribed viewers (OneSegment broadcast). The push
+ * deep-links to the event via /?watch=<id>.
+ */
+export async function sendEventAlert(
+  event: { id: string; homeTeam: string; awayTeam: string },
+  title: string,
+  body: string,
+): Promise<EventAlertResult> {
+  const payload: PushPayload = {
+    title,
+    body,
+    url: `/?watch=${encodeURIComponent(event.id)}`,
+    tag: `event-${event.id}`,
+    kind: 'event',
+  };
+  const emptyVapid: PushResult = { sent: 0, failed: 0, removed: 0, configured: false };
+  const [vapid, onesignal] = await Promise.all([
+    sendPush(payload).catch(() => emptyVapid),
+    sendOneSignalPush(payload).catch(() => ({ ok: false, configured: false }) as OneSignalResult),
+  ]);
+  return { ok: vapid.sent > 0 || onesignal.ok, vapid, onesignal };
+}
+
 export function notifyNewEvent(kind: 'live' | 'upcoming', home: string, away: string, league: string) {
   const prefs = getPushPrefs();
   const payload = {

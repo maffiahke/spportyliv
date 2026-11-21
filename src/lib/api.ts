@@ -207,6 +207,26 @@ export function deleteEvents(ids: string[]): Promise<{ ok: boolean; deleted: num
   }).then((r) => j<{ ok: boolean; deleted: number }>(r));
 }
 
+export interface PushAlertResult {
+  ok: boolean;
+  error?: string;
+  vapid: { sent: number; failed: number; configured: boolean };
+  onesignal: { ok: boolean; configured: boolean; detail?: string };
+}
+
+export function notifyEvent(payload: {
+  id: string;
+  template: string;
+  title?: string;
+  body?: string;
+}): Promise<PushAlertResult> {
+  return fetch('/api/admin/events/notify', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  }).then((r) => j<PushAlertResult>(r));
+}
+
 export interface MatchImportStats {
   ok: boolean;
   format: 'json' | 'm3u';

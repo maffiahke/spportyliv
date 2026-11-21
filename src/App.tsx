@@ -108,6 +108,35 @@ export default function App() {
     void reloadContent();
   }, [reloadContent]);
 
+  // Push-notification deep link: /?watch=<eventId> opens the event's player
+  // once content is loaded, or lands on Fixtures for not-yet-started matches.
+  const watchRequestRef = useRef<string | null>(null);
+  try {
+    watchRequestRef.current = new URLSearchParams(window.location.search).get('watch');
+  } catch {
+    watchRequestRef.current = null;
+  }
+  useEffect(() => {
+    const id = watchRequestRef.current;
+    if (!id || rawDataRef.current === null) return;
+    watchRequestRef.current = null;
+    window.history.replaceState({}, '', window.location.pathname);
+    // Live (admin event id, or a promoted fixture), then near-kickoff previews.
+    const playable =
+      content.liveMatches.find((m) => m.id === `iptv-ev-${id}` || m.id === `iptv-up-${id}`) ??
+      content.upcomingMatches.find((m) => m.id === `iptv-up-${id}`);
+    if (playable) {
+      openPlayerScreen(playable, null);
+      return;
+    }
+    if (content.upcomingEvents.some((m) => m.id === `iptv-up-${id}`)) {
+      const match = content.upcomingEvents.find((m) => m.id === `iptv-up-${id}`);
+      setActiveTab('fixtures');
+      setToastMessage(`${match ? `${match.homeTeam} vs ${match.awayTeam} ` : ''}is on the fixtures list`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content]);
+
   // Time-derived statuses must advance while the page is open: re-merge the
   // last fetched data periodically so a match flips UPCOMING → LIVE at kickoff
   // (and out of the live window 2h later) without waiting for a refetch.

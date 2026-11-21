@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { CalendarClock, Check, Pencil, Plus, Radio, RotateCcw, Save, Trash2, Upload, X } from 'lucide-react';
+import { Bell, CalendarClock, Check, Pencil, Plus, Radio, RotateCcw, Save, Send, Trash2, Upload, X } from 'lucide-react';
 import {
   AdminEventStatus,
   AdminLiveEvent,
@@ -8,7 +8,7 @@ import {
   IptvSport,
   StreamHeaders,
 } from '../../types/iptv';
-import { createEvent, deleteEvent, deleteEvents, importMatches, updateEvent } from '../../lib/api';
+import { createEvent, deleteEvent, deleteEvents, importMatches, notifyEvent, updateEvent } from '../../lib/api';
 import { computeEventStatus } from '../../lib/appData';
 import { HeadersEditor, NeonField, NeonInput, NeonSelect, NeonToggle } from './ui';
 
@@ -107,6 +107,11 @@ export const EventsTab: React.FC<EventsTabProps> = ({
   // Optional date filter ('' = all): matches dateKey, or the viewer-local date
   // of the kickoff timestamp for imported events.
   const [dateFilter, setDateFilter] = useState('');
+  // Push-alert modal target (event + which list it came from).
+  const [alertTarget, setAlertTarget] = useState<{
+    event: AdminLiveEvent | AdminUpcomingEvent;
+    isLive: boolean;
+  } | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const set = <K extends keyof EventFormState>(key: K, value: EventFormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -682,6 +687,15 @@ export const EventsTab: React.FC<EventsTabProps> = ({
                 <NeonToggle on={ev.enabled} onChange={(next) => toggleEvent(ev.id, next)} label={`Enable ${ev.homeTeam} vs ${ev.awayTeam}`} />
                 <button
                   type="button"
+                  onClick={() => setAlertTarget({ event: ev, isLive: true })}
+                  className="neon-btn-ghost px-2.5 py-1.5"
+                  aria-label={`Push alert for ${ev.homeTeam} vs ${ev.awayTeam}`}
+                  title="Push alert"
+                >
+                  <Bell className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
                   onClick={() => removeEvent(ev.id, `${ev.homeTeam} vs ${ev.awayTeam}`)}
                   className="neon-btn-ghost neon-btn-danger px-2.5 py-1.5"
                   aria-label="Delete event"
@@ -762,6 +776,15 @@ export const EventsTab: React.FC<EventsTabProps> = ({
                 <NeonToggle on={ev.enabled} onChange={(next) => toggleEvent(ev.id, next)} label={`Enable ${ev.homeTeam} vs ${ev.awayTeam}`} />
                 <button
                   type="button"
+                  onClick={() => setAlertTarget({ event: ev, isLive: false })}
+                  className="neon-btn-ghost px-2.5 py-1.5"
+                  aria-label={`Push alert for ${ev.homeTeam} vs ${ev.awayTeam}`}
+                  title="Push alert"
+                >
+                  <Bell className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
                   onClick={() => removeEvent(ev.id, `${ev.homeTeam} vs ${ev.awayTeam}`)}
                   className="neon-btn-ghost neon-btn-danger px-2.5 py-1.5"
                   aria-label="Delete fixture"
@@ -773,6 +796,15 @@ export const EventsTab: React.FC<EventsTabProps> = ({
           ))
         )}
       </section>
+
+      {/* Push alert modal */}
+      {alertTarget && (
+        <EventAlertModal
+          target={alertTarget}
+          onClose={() => setAlertTarget(null)}
+          onToast={onToast}
+        />
+      )}
     </div>
   );
 };
@@ -903,5 +935,142 @@ const ImportMatchesCard: React.FC<{
         </span>
       </div>
     </section>
+  );
+};
+
+type AlertTemplate = 'live_now' | 'starting_soon' | 'custom';
+
+/** Default copy for a template (mirrors the server-side templates). */
+const alertDefaults = (
+  template: AlertTemplate,
+  ev: AdminLiveEvent | AdminUpcomingEvent,
+  isLive: boolean,
+): { title: string; body: string } => {
+  const names = `${ev.homeTeam} vs ${ev.awayTeam}`;
+  const league = ev.league ? `${ev.league} — ` : '';
+  if (template === 'live_now') {
+    return {
+      title: `LIVE NOW — ${names}`,
+      body: `${league}Match is underway — watch it live on SportyLive.`,
+    };
+  }
+  if (template === 'starting_soon') {
+    const kickoffMs = ev.startTimestampMs ? Number(ev.startTimestampMs) : null;
+    const minutes = kickoffMs ? Math.round((kickoffMs - Date.now()) / 60000) : null;
+    return {
+      title: `Starting soon — ${names}`,
+      body:
+        minutes && minutes > 0
+          ? `Kickoff in ${minutes} min — watch on SportyLive.`
+          : `${league}Kickoff soon — watch on SportyLive.`,
+    };
+  }
+  return {
+    title: isLive ? `LIVE — ${names}` : `Upcoming — ${names}`,
+    body: `${league}${isLive ? 'Watch it live' : 'Get ready for kickoff'} on SportyLive.`,
+  };
+};
+
+/** Push-alert composer: pick a template, tweak the copy, send. */
+const EventAlertModal: React.FC<{
+  target: { event: AdminLiveEvent | AdminUpcomingEvent; isLive: boolean };
+  onClose: () => void;
+  onToast: (msg: string, error?: boolean) => void;
+}> = ({ target, onClose, onToast }) => {
+  const { event, isLive } = target;
+  const options: Array<{ id: AlertTemplate; label: string }> = isLive
+    ? [
+        { id: 'live_now', label: 'LIVE NOW' },
+        { id: 'custom', label: 'Custom' },
+      ]
+    : [
+        { id: 'starting_soon', label: 'Starting soon' },
+        { id: 'custom', label: 'Custom' },
+      ];
+  const [template, setTemplate] = useState<AlertTemplate>(options[0].id);
+  const [title, setTitle] = useState(() => alertDefaults(options[0].id, event, isLive).title);
+  const [body, setBody] = useState(() => alertDefaults(options[0].id, event, isLive).body);
+  const [busy, setBusy] = useState(false);
+
+  const pickTemplate = (next: AlertTemplate) => {
+    setTemplate(next);
+    const defaults = alertDefaults(next, event, isLive);
+    setTitle(defaults.title);
+    setBody(defaults.body);
+  };
+
+  const send = async () => {
+    setBusy(true);
+    try {
+      const res = await notifyEvent({
+        id: event.id,
+        template,
+        title: title.trim() || undefined,
+        body: body.trim() || undefined,
+      });
+      const parts: string[] = [];
+      if (res.vapid.configured) parts.push(`${res.vapid.sent} admin device${res.vapid.sent === 1 ? '' : 's'}`);
+      if (res.onesignal.configured) parts.push(res.onesignal.ok ? 'OneSignal broadcast sent' : 'OneSignal failed');
+      if (res.ok) onToast(`Alert sent — ${parts.join(' · ') || 'no channels configured'}`);
+      else onToast('Alert failed — nothing delivered', true);
+      onClose();
+    } catch (err) {
+      onToast((err as Error).message, true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 px-4">
+      <div className="neon-card w-full max-w-md p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-display font-extrabold text-sm text-slate-900">
+            Push alert — {event.homeTeam} vs {event.awayTeam}
+          </h3>
+          <button type="button" onClick={onClose} className="neon-btn-ghost px-2 py-1" aria-label="Close">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <p className="text-[10.5px] text-slate-500">
+          Goes to your admin devices and every OneSignal subscriber. Tapping it opens the event.
+        </p>
+        <NeonField label="Template">
+          <NeonSelect value={template} onChange={(e) => pickTemplate(e.target.value as AlertTemplate)}>
+            {options.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </NeonSelect>
+        </NeonField>
+        <NeonField label="Title">
+          <NeonInput value={title} onChange={(e) => setTitle(e.target.value)} maxLength={60} />
+        </NeonField>
+        <NeonField label="Message">
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            rows={3}
+            maxLength={180}
+            className="w-full rounded-xl bg-[#EEF4FF] border border-white/85 shadow-[inset_2px_2px_6px_rgba(163,189,226,0.4),inset_-2px_-2px_6px_rgba(255,255,255,0.9)] p-3 text-[11px] text-slate-800 outline-none focus:border-[#1D6BFF]/60"
+          />
+        </NeonField>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void send()}
+            className="neon-btn neon-btn-accent px-4 py-2 text-[11px] disabled:opacity-60"
+          >
+            <Send className="w-3.5 h-3.5" />
+            {busy ? 'Sending…' : 'Send alert'}
+          </button>
+          <button type="button" onClick={onClose} className="neon-btn-ghost px-3 py-2 text-[11px]">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
   );
 };
