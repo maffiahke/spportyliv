@@ -236,6 +236,11 @@ export const BannersTab: React.FC<BannersTabProps> = ({ banners, liveEvents, onC
             </NeonSelect>
           </NeonField>
           <NeonField label="Background image URL (optional)" className="md:col-span-3">
+          <p className="text-[10px] text-slate-500 mb-1">
+            Best size: <strong>1600 × 534 px (3:1)</strong>, landscape. Keep the subject on the
+            right/center — the left side is covered by the headline + dark scrim. Keep text and
+            logos out of the middle band (it gets cropped on phones). JPG or WebP, under ~300 KB.
+          </p>
             <div className="flex items-center gap-2">
               <NeonInput
                 value={form.imageUrl}
