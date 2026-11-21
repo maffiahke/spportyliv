@@ -757,6 +757,8 @@ export default function App() {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-start">
                   {/* Live Now + Upcoming Column */}
                   <div className="lg:col-span-7 xl:col-span-8 space-y-5">
+                  {/* Live Now — the whole section hides when nothing is playing */}
+                  {visibleLiveMatches.length > 0 && (
                   <section aria-label="Live now" className="space-y-3">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2.5">
@@ -782,20 +784,7 @@ export default function App() {
                       </button>
                     </div>
 
-                    {visibleLiveMatches.length === 0 ? (
-                      <div className="neu-surface rounded-[24px] p-6 text-center">
-                        <p className="font-display font-bold text-sm text-slate-900">
-                          No live broadcasts currently in this category
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedSport('all')}
-                          className="mt-2.5 text-xs font-display font-bold text-[#1D6BFF] hover:underline cursor-pointer"
-                        >
-                          View all live matches
-                        </button>
-                      </div>
-                    ) : (
+                    {(
                       <div
                         className={
                           showAllLive
@@ -822,6 +811,7 @@ export default function App() {
                       </div>
                     )}
                   </section>
+                  )}
 
                   {/* In-feed unit: after the Live Now row, before Upcoming */}
                   <AdSlot placement="home-infeed" ads={ads} />
@@ -864,7 +854,8 @@ export default function App() {
                   )}
                   </div>
 
-                  {/* Scheduled Events Column (5+ hours to kickoff) */}
+                  {/* Scheduled Events Column (5+ hours to kickoff) — hides when empty */}
+                  {visibleScheduledEvents.length > 0 && (
                   <section
                     aria-label="Scheduled events"
                     className="lg:col-span-5 xl:col-span-4 space-y-3"
@@ -891,13 +882,7 @@ export default function App() {
                       </button>
                     </div>
 
-                    {visibleScheduledEvents.length === 0 ? (
-                      <div className="neu-surface rounded-[22px] p-6 text-center">
-                        <p className="font-display font-bold text-sm text-slate-900">
-                          No scheduled events match this filter
-                        </p>
-                      </div>
-                    ) : (
+                    {(
                       <div className="space-y-3.5">
                         {visibleScheduledEvents.map((event) => (
                           <UpcomingEventCard
@@ -917,6 +902,7 @@ export default function App() {
                       className="lg:sticky lg:top-[84px]"
                     />
                   </section>
+                  )}
                 </div>
               </>
             )}
