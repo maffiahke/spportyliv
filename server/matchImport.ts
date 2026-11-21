@@ -254,7 +254,7 @@ export function importMatchesIntoStore(
         existingLive.awayLogoUrl = m.logo2 ?? existingLive.awayLogoUrl;
         existingLive.time = time || existingLive.time;
         existingLive.status = 'live';
-        existingLive.enabled = true;
+        // Leave enabled untouched on re-import updates.
         result.updated++;
         continue;
       }
@@ -280,7 +280,8 @@ export function importMatchesIntoStore(
         status: 'live',
         dateKey,
         time,
-        enabled: true,
+        // Imported entries start disabled: the admin reviews and enables them.
+        enabled: false,
       };
       store.liveEvents.unshift(ev);
       result.liveCreated++;
@@ -297,7 +298,7 @@ export function importMatchesIntoStore(
       existingUpcoming.awayTeam = m.team2;
       existingUpcoming.time = time || existingUpcoming.time;
       existingUpcoming.status = 'upcoming';
-      existingUpcoming.enabled = true;
+      // Leave enabled untouched on re-import updates.
       result.updated++;
       continue;
     }
@@ -318,7 +319,8 @@ export function importMatchesIntoStore(
       customStreams: streams,
       headers: headersFromStream(primary ?? {}),
       status: 'upcoming',
-      enabled: true,
+      // Imported entries start disabled: the admin reviews and enables them.
+      enabled: false,
     };
     store.upcomingEvents.unshift(ev);
     result.upcomingCreated++;

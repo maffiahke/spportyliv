@@ -101,9 +101,45 @@ export const EventsTab: React.FC<EventsTabProps> = ({
   const [form, setForm] = useState<EventFormState>(emptyForm);
   const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Multi-select across both event lists for bulk enable/disable.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const formRef = useRef<HTMLFormElement>(null);
   const set = <K extends keyof EventFormState>(key: K, value: EventFormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
+
+  const toggleSelected = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const setSectionSelected = (events: Array<{ id: string }>, on: boolean) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const ev of events) {
+        if (on) next.add(ev.id);
+        else next.delete(ev.id);
+      }
+      return next;
+    });
+
+  const bulkSetEnabled = async (on: boolean) => {
+    if (busy || selectedIds.size === 0) return;
+    setBusy(true);
+    try {
+      await Promise.all([...selectedIds].map((id) => updateEvent(id, { enabled: on })));
+      onToast(`${on ? 'Enabled' : 'Disabled'} ${selectedIds.size} event${selectedIds.size === 1 ? '' : 's'}`);
+      setSelectedIds(new Set());
+      onChanged();
+    } catch (err) {
+      onToast((err as Error).message, true);
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -268,6 +304,37 @@ export const EventsTab: React.FC<EventsTabProps> = ({
           </span>
         )}
       </div>
+
+      {/* Bulk selection bar */}
+      {selectedIds.size > 0 && (
+        <div className="neon-card p-3 flex items-center gap-2 flex-wrap sticky top-2 z-10">
+          <span className="neon-badge neon-badge-live">{selectedIds.size} selected</span>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void bulkSetEnabled(true)}
+            className="neon-btn px-4 py-1.5 text-[11px] disabled:opacity-60"
+          >
+            <Check className="w-3.5 h-3.5" />
+            Enable selected
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void bulkSetEnabled(false)}
+            className="neon-btn-ghost px-3 py-1.5 text-[11px] disabled:opacity-60"
+          >
+            Disable selected
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedIds(new Set())}
+            className="neon-btn-ghost px-3 py-1.5 text-[11px]"
+          >
+            Clear
+          </button>
+        </div>
+      )}
 
       {/* Match feed import (JSON / M3U) */}
       <ImportMatchesCard onChanged={onChanged} onToast={onToast} />
@@ -456,14 +523,42 @@ export const EventsTab: React.FC<EventsTabProps> = ({
 
       {/* Live events list */}
       <section className="space-y-3">
-        <h3 className="font-display font-extrabold text-sm text-slate-900 px-1">
-          Live Events <span className="text-slate-500">({liveEvents.length})</span>
-        </h3>
+        <div className="flex items-center gap-3 px-1 flex-wrap">
+          <h3 className="font-display font-extrabold text-sm text-slate-900">
+            Live Events <span className="text-slate-500">({liveEvents.length})</span>
+          </h3>
+          {liveEvents.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const allOn = liveEvents.every((e) => selectedIds.has(e.id));
+                setSectionSelected(liveEvents, !allOn);
+              }}
+              className="neon-btn-ghost px-2.5 py-1 text-[10px]"
+            >
+              {liveEvents.every((e) => selectedIds.has(e.id)) ? 'Unselect all' : 'Select all'}
+            </button>
+          )}
+        </div>
         {liveEvents.length === 0 ? (
           <div className="neon-card p-6 text-center text-xs text-slate-500">No live events published yet.</div>
         ) : (
           liveEvents.map((ev) => (
             <div key={ev.id} className="neon-row p-3.5 flex items-center gap-3 flex-wrap">
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={selectedIds.has(ev.id)}
+                aria-label={`Select ${ev.homeTeam} vs ${ev.awayTeam}`}
+                onClick={() => toggleSelected(ev.id)}
+                className={`w-5 h-5 rounded-md shrink-0 flex items-center justify-center transition-colors cursor-pointer ${
+                  selectedIds.has(ev.id)
+                    ? 'bg-[#1D6BFF] text-white'
+                    : 'bg-white border border-slate-300 text-transparent hover:border-[#1D6BFF]/60'
+                }`}
+              >
+                <Check className="w-3 h-3" />
+              </button>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={statusBadgeClass(ev.status ?? 'live')}>
@@ -520,14 +615,42 @@ export const EventsTab: React.FC<EventsTabProps> = ({
 
       {/* Upcoming events list */}
       <section className="space-y-3">
-        <h3 className="font-display font-extrabold text-sm text-slate-900 px-1">
-          Upcoming Fixtures <span className="text-slate-500">({upcomingEvents.length})</span>
-        </h3>
+        <div className="flex items-center gap-3 px-1 flex-wrap">
+          <h3 className="font-display font-extrabold text-sm text-slate-900">
+            Upcoming Fixtures <span className="text-slate-500">({upcomingEvents.length})</span>
+          </h3>
+          {upcomingEvents.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const allOn = upcomingEvents.every((e) => selectedIds.has(e.id));
+                setSectionSelected(upcomingEvents, !allOn);
+              }}
+              className="neon-btn-ghost px-2.5 py-1 text-[10px]"
+            >
+              {upcomingEvents.every((e) => selectedIds.has(e.id)) ? 'Unselect all' : 'Select all'}
+            </button>
+          )}
+        </div>
         {upcomingEvents.length === 0 ? (
           <div className="neon-card p-6 text-center text-xs text-slate-500">No fixtures scheduled yet.</div>
         ) : (
           upcomingEvents.map((ev) => (
             <div key={ev.id} className="neon-row p-3.5 flex items-center gap-3 flex-wrap">
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={selectedIds.has(ev.id)}
+                aria-label={`Select ${ev.homeTeam} vs ${ev.awayTeam}`}
+                onClick={() => toggleSelected(ev.id)}
+                className={`w-5 h-5 rounded-md shrink-0 flex items-center justify-center transition-colors cursor-pointer ${
+                  selectedIds.has(ev.id)
+                    ? 'bg-[#1D6BFF] text-white'
+                    : 'bg-white border border-slate-300 text-transparent hover:border-[#1D6BFF]/60'
+                }`}
+              >
+                <Check className="w-3 h-3" />
+              </button>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="neon-badge">{ev.dateKey}</span>
