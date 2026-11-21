@@ -113,6 +113,10 @@ export function adminEventToLiveMatch(
   for (const [i, s] of (ev.customStreams ?? []).entries()) {
     pushSource(s.url, s.title || `Stream ${i + 1}`, headersFromMatchStream(s), `cs-${i}`, s.quality);
   }
+  // The event's own stream URL is always a source — it is the main stream
+  // (usually the primary from the feed). Dedupe keeps channel-seeded URLs
+  // from doubling up.
+  pushSource(ev.streamUrl, 'Primary stream', ev.headers, 'primary');
   const streamUrl = streams[0]?.url ?? '';
   return {
     id: `iptv-ev-${ev.id}`,
