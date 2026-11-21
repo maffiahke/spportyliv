@@ -600,7 +600,13 @@ export const EventsTab: React.FC<EventsTabProps> = ({
                   </span>
                 </div>
                 <p className="mt-0.5 text-[10.5px] text-slate-500 truncate">
-                  {[ev.dateKey, ev.time, ev.league, ev.venue].filter(Boolean).join(' · ')}
+                  {[
+                    ev.startTimestampMs
+                      ? `${ev.dateKey ?? ''} · ${new Date(ev.startTimestampMs).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} (your time)`
+                      : [ev.dateKey, ev.time].filter(Boolean).join(' · '),
+                    ev.league,
+                    ev.venue,
+                  ].filter(Boolean).join(' · ')}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">

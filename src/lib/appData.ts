@@ -51,6 +51,20 @@ export function eventStartMs(ev: {
 }
 
 /**
+ * Kickoff as a local Date. Imported feeds carry the exact timestamp, so that
+ * wins; the raw `time` string is in the FEED's timezone (e.g. Asia/Dhaka) and
+ * must not be read as the viewer's local time when a timestamp exists.
+ */
+export function eventKickoffDate(ev: {
+  startTimestampMs?: number;
+  dateKey?: string;
+  time?: string;
+}): Date | null {
+  if (ev.startTimestampMs && ev.startTimestampMs > 0) return new Date(ev.startTimestampMs);
+  return parseKickoff(ev.dateKey, ev.time);
+}
+
+/**
  * Time-based status:
  *  - started and within 2h of kickoff → live
  *  - started more than 2h ago → ended
@@ -160,25 +174,31 @@ export function iptvChannelToTVChannel(c: IptvChannel): TVChannel {
 }
 
 export function adminUpcomingToUpcomingEvent(ev: AdminUpcomingEvent): UpcomingEvent {
-  const date = new Date(`${ev.dateKey}T12:00:00`);
+  // Imported feeds carry the exact kickoff: derive the calendar label from the
+  // timestamp in the VIEWER's timezone (the raw `time` is the feed's timezone).
+  const kickoff = eventKickoffDate(ev);
+  const date = kickoff ?? new Date(`${ev.dateKey}T12:00:00`);
   const dayOfWeek = ev.dateKey
     ? ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][date.getDay()]
     : '';
-  const dayNumber = ev.dateKey ? ev.dateKey.slice(8, 10) : '';
-  const month = ev.dateKey ? ev.dateKey.slice(5, 7) : '';
+  const dayNumber = ev.dateKey ? String(date.getDate()).padStart(2, '0') : '';
   const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const month = monthNames[date.getMonth()];
   return {
     id: `iptv-up-${ev.id}`,
     sport: ev.sport,
     dayOfWeek,
     dayNumber,
-    month: monthNames[Number(month) - 1] ?? month,
+    month,
     dateKey: ev.dateKey,
     homeTeam: ev.homeTeam,
     awayTeam: ev.awayTeam,
     homeCrest: ev.homeLogoUrl || ev.homeTeam,
     awayCrest: ev.awayLogoUrl || ev.awayTeam,
-    time: ev.time,
+    time:
+      kickoff && ev.startTimestampMs
+        ? kickoff.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+        : ev.time,
     league: ev.league,
     leagueCrest: ev.leagueLogo || ev.league,
     channel: ev.channel,
@@ -281,7 +301,7 @@ export function adminUpcomingToLiveMatch(
     venue: ev.league,
     stats: [],
     commentary: [],
-    kickoffLabel: formatKickoffLabel(kickoff, ev.time),
+    kickoffLabel: formatKickoffLabel(kickoff, ev.startTimestampMs ? undefined : ev.time),
     kickoffAt: kickoff.toISOString(),
     dateKey: ev.dateKey,
   };
@@ -337,7 +357,7 @@ export function mergeAppContent(data: AppData): MergedAppContent {
   for (const ev of enabledUpcoming) {
     const status = computeEventStatus(ev, (ev.status ?? 'scheduled') as AdminEventStatus);
     if (status === 'ended') continue; // past the live window — not shown publicly
-    const kickoff = parseKickoff(ev.dateKey, ev.time);
+    const kickoff = eventKickoffDate(ev);
     if (status === 'live') {
       // Kickoff time arrived (within the 2h live window) — show it live.
       promotedLive.push(adminUpcomingToLiveMatch(ev, kickoff ?? new Date(), { asLive: true }));
@@ -349,8 +369,8 @@ export function mergeAppContent(data: AppData): MergedAppContent {
   }
   soonEntries.sort((a, b) => a.kickoff.getTime() - b.kickoff.getTime());
   laterEntries.sort((a, b) => {
-    const aTime = parseKickoff(a.dateKey, a.time)?.getTime() ?? Number.POSITIVE_INFINITY;
-    const bTime = parseKickoff(b.dateKey, b.time)?.getTime() ?? Number.POSITIVE_INFINITY;
+    const aTime = eventKickoffDate(a)?.getTime() ?? Number.POSITIVE_INFINITY;
+    const bTime = eventKickoffDate(b)?.getTime() ?? Number.POSITIVE_INFINITY;
     return aTime - bTime;
   });
   const upcomingMatches = soonEntries.map(({ ev, kickoff }) =>
