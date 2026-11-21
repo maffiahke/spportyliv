@@ -164,17 +164,76 @@ export async function sendPush(payload: PushPayload): Promise<PushResult> {
   return { sent, failed, removed: stale.length, configured: true };
 }
 
+/* ───────── OneSignal (viewer broadcasts, optional) ───────── */
+
+export interface OneSignalResult {
+  ok: boolean;
+  /** True when ONESIGNAL_APP_ID + ONESIGNAL_REST_API_KEY are set. */
+  configured: boolean;
+  detail?: string;
+}
+
+/**
+ * Broadcasts a notification to every subscribed viewer via the OneSignal
+ * REST API (v11). Used for viewer-facing alerts — admin ops alerts (sync
+ * status, errors) stay on the VAPID channel above so they never spam
+ * viewers.
+ */
+export async function sendOneSignalPush(payload: PushPayload): Promise<OneSignalResult> {
+  const appId = (process.env.ONESIGNAL_APP_ID ?? '').trim();
+  const apiKey = (process.env.ONESIGNAL_REST_API_KEY ?? '').trim();
+  if (!appId || !apiKey) return { ok: false, configured: false };
+  try {
+    const res = await fetch('https://api.onesignal.com/notifications', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Basic ${apiKey}`,
+      },
+      body: JSON.stringify({
+        app_id: appId,
+        included_segments: ['Subscribed Users'],
+        headings: { en: payload.title },
+        contents: { en: payload.body },
+        url: payload.url ?? '/',
+        ...(payload.tag ? { external_id: payload.tag } : {}),
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      id?: string;
+      errors?: Record<string, unknown>;
+    };
+    if (!res.ok) {
+      console.error('[onesignal] send rejected:', res.status, JSON.stringify(json).slice(0, 300));
+      return { ok: false, configured: true, detail: `HTTP ${res.status}` };
+    }
+    if (json.errors) {
+      console.error('[onesignal] send errors:', JSON.stringify(json.errors).slice(0, 300));
+      return { ok: false, configured: true, detail: 'errors in response' };
+    }
+    return { ok: true, configured: true, detail: json.id };
+  } catch (err) {
+    console.error('[onesignal] send failed:', (err as Error).message);
+    return { ok: false, configured: true, detail: (err as Error).message };
+  }
+}
+
 /* ───────────── Event-driven notifications (respect admin prefs) ───────────── */
 
 export function notifyNewEvent(kind: 'live' | 'upcoming', home: string, away: string, league: string) {
   const prefs = getPushPrefs();
-  if (!prefs.newEvents) return;
-  void sendPush({
+  const payload = {
     title: kind === 'live' ? 'New live event published' : 'New fixture scheduled',
     body: `${home} vs ${away}${league ? ` · ${league}` : ''}`,
     tag: `event-${home}-${away}`.toLowerCase().replace(/\s+/g, '-'),
-    kind: 'event',
-  }).catch(() => {});
+    kind: 'event' as const,
+  };
+  if (prefs.newEvents) {
+    void sendPush(payload).catch(() => {});
+  }
+  // Viewer broadcast through OneSignal when configured.
+  void sendOneSignalPush(payload).catch(() => {});
 }
 
 export function notifySyncError(playlistName: string, message: string) {
