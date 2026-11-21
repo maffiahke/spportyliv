@@ -1,0 +1,38 @@
+# Playlist auto-sync: pings the app's cron endpoint every 10 minutes.
+#
+# Vercel Hobby only allows once-a-day crons, so this external scheduler keeps
+# playlists refreshed (re-fetch M3U sources, probe channels, delete dead ones)
+# on the interval the app expects.
+#
+# If the Vercel project sets CRON_SECRET, add it as the CRON_SECRET repository
+# secret (Settings → Secrets and variables → Actions) and this workflow will
+# authenticate with it; without a secret the endpoint accepts the call as-is.
+name: Playlist auto-sync
+
+on:
+  schedule:
+    # Every 10 minutes. GitHub may start runs a few minutes late under load.
+    - cron: '*/10 * * * *'
+  # Allow manual runs from the Actions tab.
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Keep logs tidy: skip a run if one is somehow still in flight.
+    concurrency:
+      group: playlist-sync
+      cancel-in-progress: false
+    steps:
+      - name: Trigger playlist sync
+        env:
+          SECRET: ${{ secrets.CRON_SECRET }}
+          TARGET: https://sporty-live.vercel.app/api/cron/playlist-sync
+        run: |
+          ARGS=(-sS -m 110 -X POST "$TARGET" -o /tmp/sync-response.json -w 'HTTP %{http_code}\n')
+          if [ -n "$SECRET" ]; then
+            ARGS+=(-H "Authorization: Bearer $SECRET")
+          fi
+          curl "${ARGS[@]}" || true
+          cat /tmp/sync-response.json 2>/dev/null || true
+          echo
