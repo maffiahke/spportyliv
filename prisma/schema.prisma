@@ -105,6 +105,7 @@ model UpcomingEvent {
   time      String  @default("")
   streamUrl String? @map("stream_url")
   customStreams Json @default("[]") @map("custom_streams")
+  channelIds Json? @map("channel_ids")
   headers   Json    @default("{}")
   status    String?
   startTimestampMs BigInt? @map("start_timestamp_ms")

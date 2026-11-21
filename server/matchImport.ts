@@ -263,7 +263,8 @@ export function importMatchesIntoStore(
     if (live) {
       if (existingLive) {
         existingLive.streamUrl = primary?.url ?? existingLive.streamUrl ?? '';
-        existingLive.customStreams = []; // imports attach only the primary stream
+        // Admin-attached extra streams survive re-imports; imports still only
+        // add the primary stream themselves.
         existingLive.league = league;
         existingLive.venue = m.venue ?? existingLive.venue;
         existingLive.homeLogoUrl = m.logo1 ?? existingLive.homeLogoUrl;
@@ -308,7 +309,8 @@ export function importMatchesIntoStore(
     // Upcoming fixture.
     if (existingUpcoming) {
       existingUpcoming.streamUrl = primary?.url ?? existingUpcoming.streamUrl;
-      existingUpcoming.customStreams = []; // imports attach only the primary stream
+      // Admin-attached extra streams survive re-imports; imports still only
+      // add the primary stream themselves.
       existingUpcoming.league = league;
       existingUpcoming.channel = channelLabel;
       existingUpcoming.homeTeam = m.team1;

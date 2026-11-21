@@ -118,6 +118,23 @@ async function fetchPlaylistText(sourceUrl: string): Promise<string> {
  *   quality, edited name/headers) while refreshing provider metadata.
  * - URLs that disappeared from the playlist (dead/gone) are removed.
  */
+/** Normalise admin-provided extra streams; null when the field is absent. */
+function parseCustomStreams(raw: unknown): Array<{ url: string; title?: string; userAgent?: string; referer?: string }> | null {
+  if (!Array.isArray(raw)) return null;
+  const streams: Array<{ url: string; title?: string; userAgent?: string; referer?: string }> = [];
+  for (const item of raw as unknown[]) {
+    const s = (item ?? {}) as Record<string, unknown>;
+    const url = typeof s.url === 'string' ? s.url.trim() : '';
+    if (!url) continue;
+    const out: { url: string; title?: string; userAgent?: string; referer?: string } = { url };
+    if (typeof s.title === 'string' && s.title.trim()) out.title = s.title.trim();
+    if (typeof s.userAgent === 'string' && s.userAgent.trim()) out.userAgent = s.userAgent.trim();
+    if (typeof s.referer === 'string' && s.referer.trim()) out.referer = s.referer.trim();
+    streams.push(out);
+  }
+  return streams;
+}
+
 async function syncPlaylistChannels(
   playlist: IptvPlaylist,
   opts: { testChannels?: boolean } = {},
@@ -1278,6 +1295,23 @@ export async function handleApiRequest(
           status: (body.status ? String(body.status) : 'upcoming') as AdminUpcomingEvent['status'],
           enabled: body.enabled !== false,
         };
+        // Channel-backed extra streams for the player switcher.
+        if (Array.isArray(body.channelIds)) {
+          const ids = [...new Set((body.channelIds as unknown[]).map((x) => String(x)).filter(Boolean))];
+          const unknown = ids.filter((cid) => !store.channels.some((c) => c.id === cid));
+          if (unknown.length > 0) {
+            sendJson(res, 400, { error: `Selected channel not found: ${unknown.join(', ')}` });
+            return true;
+          }
+          ev.channelIds = ids;
+          if (ids.length > 0 && !ev.streamUrl) {
+            const src = store.channels.find((c) => c.id === ids[0])!;
+            ev.streamUrl = src.url;
+            if (src.headers && Object.keys(src.headers).length > 0) ev.headers = src.headers;
+          }
+        }
+        const extra = parseCustomStreams(body.customStreams);
+        if (extra) ev.customStreams = extra;
         store.upcomingEvents.unshift(ev);
         await saveStore();
         notifyNewEvent('upcoming', ev.homeTeam, ev.awayTeam, ev.league);
@@ -1308,6 +1342,8 @@ export async function handleApiRequest(
           time: body.time ? String(body.time) : undefined,
           enabled: body.enabled !== false,
         };
+        const extraStreams = parseCustomStreams(body.customStreams);
+        if (extraStreams) ev.customStreams = extraStreams;
         // Failover sources: every referenced channel must exist. channelIds[0]
         // is the primary and mirrors channelId; the rest are fallback streams.
         const ids = [...new Set([...(ev.channelIds ?? []), ...(ev.channelId ? [ev.channelId] : [])])];
@@ -1406,7 +1442,19 @@ export async function handleApiRequest(
       }
       if (typeof body.sport === 'string') (target as { sport: string }).sport = body.sport;
       if (typeof body.enabled === 'boolean') target.enabled = body.enabled;
+      if (
+        (typeof body.startTimestampMs === 'number' && Number.isFinite(body.startTimestampMs)) ||
+        body.startTimestampMs === null
+      ) {
+        (target as { startTimestampMs?: number }).startTimestampMs =
+          body.startTimestampMs === null ? undefined : Number(body.startTimestampMs);
+      }
       if (body.headers && typeof body.headers === 'object') target.headers = body.headers as StreamHeaders;
+      if (Array.isArray(body.customStreams)) {
+        // Admin-attached extra streams shown in the player switcher alongside
+        // the imported primary.
+        target.customStreams = (parseCustomStreams(body.customStreams) ?? []) as never;
+      }
       if (typeof body.homeScore === 'number') (target as { homeScore?: number }).homeScore = body.homeScore;
       if (typeof body.awayScore === 'number') (target as { awayScore?: number }).awayScore = body.awayScore;
       if (Array.isArray(body.channelIds) && 'channelId' in target) {
@@ -1425,6 +1473,20 @@ export async function handleApiRequest(
           const src = store.channels.find((c) => c.id === ids[0])!;
           liveEv.streamUrl = src.url;
           if (src.headers && Object.keys(src.headers).length > 0) liveEv.headers = src.headers;
+        }
+      } else if (Array.isArray(body.channelIds) && !('channelId' in target)) {
+        // Upcoming fixtures support channel-backed extra streams too.
+        const ids = [...new Set((body.channelIds as unknown[]).map((x) => String(x)).filter(Boolean))];
+        const unknown = ids.filter((cid) => !store.channels.some((c) => c.id === cid));
+        if (unknown.length > 0) {
+          sendJson(res, 400, { error: `Selected channel not found: ${unknown.join(', ')}` });
+          return true;
+        }
+        (target as AdminUpcomingEvent).channelIds = ids;
+        if (ids.length > 0 && !target.streamUrl) {
+          const src = store.channels.find((c) => c.id === ids[0])!;
+          target.streamUrl = src.url;
+          if (src.headers && Object.keys(src.headers).length > 0) target.headers = src.headers;
         }
       }
       if (typeof body.quality === 'string' && (body.quality === '4K' || body.quality === 'HD')) {

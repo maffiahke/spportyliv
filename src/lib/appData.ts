@@ -31,11 +31,15 @@ const SPORT_THEMES: Record<string, [string, string]> = {
   other: ['#1E293B', '#334155'],
 };
 
-/** StreamHeaders for an imported match stream. */
-function headersFromMatchStream(s: MatchStream): StreamHeaders {
+/** StreamHeaders for an imported match stream; empty streams inherit the event's headers. */
+function headersFromMatchStream(s: MatchStream, eventHeaders?: StreamHeaders): StreamHeaders {
   const out: StreamHeaders = {};
   if (s.userAgent) out.userAgent = s.userAgent;
   if (s.referer) out.referer = s.referer;
+  if (!out.userAgent && !out.referer && eventHeaders) {
+    if (eventHeaders.userAgent) out.userAgent = eventHeaders.userAgent;
+    if (eventHeaders.referer) out.referer = eventHeaders.referer;
+  }
   return out;
 }
 
@@ -138,7 +142,7 @@ export function adminEventToLiveMatch(
     if (ch) pushSource(ch.url, ch.name, ch.headers, `ch-${ch.id}`);
   }
   for (const [i, s] of (ev.customStreams ?? []).entries()) {
-    pushSource(s.url, s.title || `Stream ${i + 1}`, headersFromMatchStream(s), `cs-${i}`, s.quality);
+    pushSource(s.url, s.title || `Stream ${i + 1}`, headersFromMatchStream(s, ev.headers), `cs-${i}`, s.quality);
   }
   // The event's own stream URL is always a source — it is the main stream
   // (usually the primary from the feed). Dedupe keeps channel-seeded URLs
@@ -292,6 +296,7 @@ export function adminUpcomingToLiveMatch(
   ev: AdminUpcomingEvent,
   kickoff: Date,
   opts: { asLive?: boolean } = {},
+  channels?: IptvChannel[],
 ): LiveMatch {
   const [leftTheme, rightTheme] = SPORT_THEMES[ev.sport] ?? SPORT_THEMES.other;
   // Failover sources for imported matches: the primary first, then the rest.
@@ -306,8 +311,13 @@ export function adminUpcomingToLiveMatch(
       url: url.startsWith('/api/iptv/stream') ? url : buildProxiedUrl(url, headers, isHlsUrl(url)),
     });
   };
+  // Channel-backed extra streams (playback order = selection order).
+  (ev.channelIds ?? []).forEach((cid) => {
+    const ch = channels?.find((c) => c.id === cid);
+    if (ch) pushSource(ch.url, ch.name, ch.headers, `ch-${ch.id}`);
+  });
   (ev.customStreams ?? []).forEach((s, i) =>
-    pushSource(s.url, s.title || `Stream ${i + 1}`, headersFromMatchStream(s), `cs-${i}`),
+    pushSource(s.url, s.title || `Stream ${i + 1}`, headersFromMatchStream(s, ev.headers), `cs-${i}`),
   );
   pushSource(ev.streamUrl ?? '', 'Primary stream', ev.headers, 'primary');
   const streamUrl = streams[0]?.url;
@@ -393,7 +403,14 @@ export function mergeAppContent(data: AppData): MergedAppContent {
     const kickoff = eventKickoffDate(ev);
     if (status === 'live') {
       // Kickoff time arrived (within the 2h live window) — show it live.
-      promotedLive.push(adminUpcomingToLiveMatch(ev, kickoff ?? new Date(), { asLive: true }));
+      promotedLive.push(
+        adminUpcomingToLiveMatch(
+          ev,
+          kickoff ?? new Date(),
+          { asLive: true },
+          data.channels,
+        ),
+      );
     } else if (status === 'upcoming' && kickoff) {
       soonEntries.push({ ev, kickoff });
     } else {
@@ -407,7 +424,7 @@ export function mergeAppContent(data: AppData): MergedAppContent {
     return aTime - bTime;
   });
   const upcomingMatches = soonEntries.map(({ ev, kickoff }) =>
-    adminUpcomingToLiveMatch(ev, kickoff)
+    adminUpcomingToLiveMatch(ev, kickoff, {}, data.channels)
   );
   const scheduledEvents = laterEntries.map(adminUpcomingToUpcomingEvent);
   const upcomingEvents = dedupeById(

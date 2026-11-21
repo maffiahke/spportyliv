@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Bell, CalendarClock, Check, Pencil, Plus, Radio, RotateCcw, Save, Send, Trash2, Upload, X } from 'lucide-react';
+import { Bell, CalendarClock, Check, Layers, Pencil, Plus, Radio, RotateCcw, Save, Send, Trash2, Upload, X } from 'lucide-react';
 import {
   AdminEventStatus,
   AdminLiveEvent,
@@ -48,6 +48,8 @@ interface EventFormState {
   channelIds: string[];
   streamUrl: string;
   headers: StreamHeaders;
+  /** Extra streams shown in the player switcher alongside the primary. */
+  customStreams: StreamRow[];
 }
 
 const STATUS_OPTIONS: Array<[AdminEventStatus, string]> = [
@@ -86,7 +88,26 @@ const emptyForm = (): EventFormState => ({
   channelIds: [],
   streamUrl: '',
   headers: {},
+  customStreams: [],
 });
+
+/** One admin-attached extra stream in the form/editor. */
+interface StreamRow {
+  title: string;
+  url: string;
+  userAgent: string;
+  referer: string;
+}
+
+const emptyStreamRow = (): StreamRow => ({ title: '', url: '', userAgent: '', referer: '' });
+
+const toStreamRows = (streams: AdminLiveEvent['customStreams']): StreamRow[] =>
+  (streams ?? []).map((s) => ({
+    title: s.title ?? '',
+    url: s.url,
+    userAgent: s.userAgent ?? '',
+    referer: s.referer ?? '',
+  }));
 
 /** Toggle a channel in the ordered failover list (selection order preserved). */
 const toggleChannelId = (ids: string[], id: string): string[] =>
@@ -112,6 +133,8 @@ export const EventsTab: React.FC<EventsTabProps> = ({
     event: AdminLiveEvent | AdminUpcomingEvent;
     isLive: boolean;
   } | null>(null);
+  // Streams manager modal (attach extra streams alongside the imported one).
+  const [streamsTarget, setStreamsTarget] = useState<AdminLiveEvent | AdminUpcomingEvent | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const set = <K extends keyof EventFormState>(key: K, value: EventFormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -201,6 +224,14 @@ export const EventsTab: React.FC<EventsTabProps> = ({
       return;
     }
     const usingChannels = form.streamMode === 'channel' && form.channelIds.length > 0;
+    const extraStreams = form.customStreams
+      .filter((r) => r.url.trim())
+      .map((r) => ({
+        url: r.url.trim(),
+        title: r.title.trim() || undefined,
+        userAgent: r.userAgent.trim() || undefined,
+        referer: r.referer.trim() || undefined,
+      }));
     if (form.kind === 'live' && !usingChannels && !form.streamUrl.trim()) {
       onToast('Pick at least one channel or provide a stream URL', true);
       return;
@@ -218,6 +249,7 @@ export const EventsTab: React.FC<EventsTabProps> = ({
           headers: form.headers,
           streamUrl: form.streamUrl.trim(),
           channelIds: form.kind === 'live' && form.streamMode === 'channel' ? form.channelIds : [],
+          customStreams: extraStreams,
           status: form.status,
           dateKey: form.dateKey,
           time: form.time.trim(),
@@ -240,6 +272,7 @@ export const EventsTab: React.FC<EventsTabProps> = ({
         headers: form.headers,
         streamUrl: form.streamUrl.trim() || undefined,
         channelIds: form.kind === 'live' && usingChannels ? form.channelIds : undefined,
+        customStreams: extraStreams.length > 0 ? extraStreams : undefined,
         status: form.status,
         dateKey: form.dateKey,
         time: form.time.trim(),
@@ -260,6 +293,8 @@ export const EventsTab: React.FC<EventsTabProps> = ({
           streamUrl: shared.streamUrl,
           league: form.league.trim() || 'Friendly',
           channel: form.channel.trim() || 'SportyLive 1 HD',
+          channelIds: form.channelIds.length > 0 ? form.channelIds : undefined,
+          customStreams: extraStreams.length > 0 ? extraStreams : undefined,
           dateKey: form.dateKey,
           time: form.time,
           status: form.status,
@@ -316,6 +351,7 @@ export const EventsTab: React.FC<EventsTabProps> = ({
       channelIds: live ? ((ev as AdminLiveEvent).channelIds?.length ? (ev as AdminLiveEvent).channelIds! : (ev as AdminLiveEvent).channelId ? [(ev as AdminLiveEvent).channelId!] : []) : [],
       streamUrl: ev.streamUrl ?? '',
       headers: ev.headers ?? {},
+      customStreams: toStreamRows(ev.customStreams),
     });
     setEditingId(ev.id);
     window.setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
@@ -325,6 +361,143 @@ export const EventsTab: React.FC<EventsTabProps> = ({
     setEditingId(null);
     setForm(emptyForm());
   };
+
+  /** Channel multi-select used by both live events and upcoming fixtures. */
+  const renderChannelMultiSelect = (label: string, hint: string) => (
+    <NeonField label={label} className="col-span-2">
+      {channels.length === 0 ? (
+        <p className="text-[10.5px] text-slate-500">Import a playlist first — no channels available.</p>
+      ) : (
+        <>
+          {form.channelIds.length > 0 && (
+            <p className="mb-1.5 text-[10.5px] text-slate-600 flex items-center flex-wrap gap-1">
+              {form.channelIds.map((id, i) => {
+                const ch = channels.find((c) => c.id === id);
+                return ch ? <span key={id} className="neon-badge">{i + 1}. {ch.name}</span> : null;
+              })}
+            </p>
+          )}
+          <div
+            role="group"
+            aria-label="Stream sources"
+            className="max-h-44 overflow-y-auto rounded-xl bg-[#EEF4FF] border border-white/85 shadow-[inset_2px_2px_6px_rgba(163,189,226,0.4),inset_-2px_-2px_6px_rgba(255,255,255,0.9)] p-2 space-y-0.5"
+          >
+            {channels.map((c) => {
+              const order = form.channelIds.indexOf(c.id);
+              const checked = order >= 0;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={checked}
+                  onClick={() => setForm((f) => ({ ...f, channelIds: toggleChannelId(f.channelIds, c.id) }))}
+                  className={`w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-display font-semibold transition-colors cursor-pointer ${
+                    checked ? 'bg-[#1D6BFF]/10 text-[#1D6BFF]' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span
+                    className={`w-4 h-4 rounded-full shrink-0 flex items-center justify-center text-[8px] font-black ${
+                      checked
+                        ? 'bg-[#1D6BFF] text-white'
+                        : 'bg-white border border-slate-300 text-transparent'
+                    }`}
+                  >
+                    {checked ? order + 1 : '✓'}
+                  </span>
+                  <span className="truncate">{c.name}</span>
+                  {c.group && <span className="ml-auto text-[9.5px] text-slate-400 truncate shrink-0">{c.group}</span>}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-[10.5px] text-slate-500">{hint}</p>
+        </>
+      )}
+    </NeonField>
+  );
+
+  /** Extra stream-link rows (customStreams) — shared by live + upcoming forms. */
+  const renderStreamLinks = () => (
+    <div className="col-span-2 md:col-span-4 space-y-2">
+      <p className="font-display font-bold text-[11px] text-slate-700">
+        Extra stream links <span className="text-slate-500 font-medium">— appear in the player's stream switcher</span>
+      </p>
+      {form.customStreams.length === 0 && (
+        <p className="text-[10.5px] text-slate-500">
+          Optional — paste backup stream URLs (and optionally their User-Agent/Referer) viewers can
+          manually switch to alongside the main stream.
+        </p>
+      )}
+      {form.customStreams.map((row, idx) => (
+        <div key={idx} className="rounded-xl border border-white/70 bg-white/60 p-2.5 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="neon-badge shrink-0">Stream {idx + 1}</span>
+            <NeonInput
+              value={row.title}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  customStreams: f.customStreams.map((r, i) => (i === idx ? { ...r, title: e.target.value } : r)),
+                }))
+              }
+              placeholder="Label shown in the switcher (optional)"
+            />
+            <button
+              type="button"
+              onClick={() =>
+                setForm((f) => ({ ...f, customStreams: f.customStreams.filter((_, i) => i !== idx) }))
+              }
+              className="neon-btn-ghost neon-btn-danger px-2 py-1.5 shrink-0"
+              aria-label="Remove stream"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <NeonInput
+            value={row.url}
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                customStreams: f.customStreams.map((r, i) => (i === idx ? { ...r, url: e.target.value } : r)),
+              }))
+            }
+            placeholder="Stream URL (https://…/stream.m3u8)"
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <NeonInput
+              value={row.userAgent}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  customStreams: f.customStreams.map((r, i) => (i === idx ? { ...r, userAgent: e.target.value } : r)),
+                }))
+              }
+              placeholder="User-Agent (optional)"
+            />
+            <NeonInput
+              value={row.referer}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  customStreams: f.customStreams.map((r, i) => (i === idx ? { ...r, referer: e.target.value } : r)),
+                }))
+              }
+              placeholder="Referer (optional)"
+            />
+          </div>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => setForm((f) => ({ ...f, customStreams: [...f.customStreams, emptyStreamRow()] }))}
+        className="neon-btn-ghost px-3 py-1.5 text-[11px]"
+      >
+        <Plus className="w-3.5 h-3.5" />
+        Add stream link
+      </button>
+    </div>
+  );
 
   const isLive = form.kind === 'live';
 
@@ -484,59 +657,10 @@ export const EventsTab: React.FC<EventsTabProps> = ({
                 </NeonSelect>
               </NeonField>
               {form.streamMode === 'channel' ? (
-                <NeonField label="Stream Sources (order = failover order)" className="col-span-2">
-                  {channels.length === 0 ? (
-                    <p className="text-[10.5px] text-slate-500">Import a playlist first — no channels available.</p>
-                  ) : (
-                    <>
-                      {form.channelIds.length > 0 && (
-                        <p className="mb-1.5 text-[10.5px] text-slate-600 flex items-center flex-wrap gap-1">
-                          {form.channelIds.map((id, i) => {
-                            const ch = channels.find((c) => c.id === id);
-                            return ch ? <span key={id} className="neon-badge">{i + 1}. {ch.name}</span> : null;
-                          })}
-                        </p>
-                      )}
-                      <div
-                        role="group"
-                        aria-label="Stream sources"
-                        className="max-h-44 overflow-y-auto rounded-xl bg-[#EEF4FF] border border-white/85 shadow-[inset_2px_2px_6px_rgba(163,189,226,0.4),inset_-2px_-2px_6px_rgba(255,255,255,0.9)] p-2 space-y-0.5"
-                      >
-                        {channels.map((c) => {
-                          const order = form.channelIds.indexOf(c.id);
-                          const checked = order >= 0;
-                          return (
-                            <button
-                              key={c.id}
-                              type="button"
-                              role="checkbox"
-                              aria-checked={checked}
-                              onClick={() => set('channelIds', toggleChannelId(form.channelIds, c.id))}
-                              className={`w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-display font-semibold transition-colors cursor-pointer ${
-                                checked ? 'bg-[#1D6BFF]/10 text-[#1D6BFF]' : 'text-slate-600 hover:text-slate-900'
-                              }`}
-                            >
-                              <span
-                                className={`w-4 h-4 rounded-full shrink-0 flex items-center justify-center text-[8px] font-black ${
-                                  checked
-                                    ? 'bg-[#1D6BFF] text-white'
-                                    : 'bg-white border border-slate-300 text-transparent'
-                                }`}
-                              >
-                                {checked ? order + 1 : '✓'}
-                              </span>
-                              <span className="truncate">{c.name}</span>
-                              {c.group && <span className="ml-auto text-[9.5px] text-slate-400 truncate shrink-0">{c.group}</span>}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <p className="mt-1.5 text-[10.5px] text-slate-500">
-                        Tick channels in play order. The first is primary; if it fails, viewers are switched to the next one.
-                      </p>
-                    </>
-                  )}
-                </NeonField>
+                renderChannelMultiSelect(
+                  'Stream Sources (order = failover order)',
+                  'Tick channels in play order. The first is primary; if it fails, viewers are switched to the next one.',
+                )
               ) : (
                 <NeonField label="IPTV Stream URL" className="col-span-2">
                   <NeonInput
@@ -576,6 +700,7 @@ export const EventsTab: React.FC<EventsTabProps> = ({
                   Live Now rail and play via the header-aware proxy.
                 </p>
               </div>
+              {renderStreamLinks()}
             </>
           ) : (
             <>
@@ -603,9 +728,14 @@ export const EventsTab: React.FC<EventsTabProps> = ({
                   placeholder="https://edge.example/live/match.m3u8"
                 />
               </NeonField>
+              {renderChannelMultiSelect(
+                'Pick from existing channels (order = playback order)',
+                'Optional — tick channels in play order to appear in the player\u2019s stream switcher alongside the stream URL.',
+              )}
               <div className="col-span-2 md:col-span-4">
                 <HeadersEditor headers={form.headers} onChange={(h) => set('headers', h)} />
               </div>
+              {renderStreamLinks()}
             </>
           )}
 
@@ -706,6 +836,15 @@ export const EventsTab: React.FC<EventsTabProps> = ({
                 <NeonToggle on={ev.enabled} onChange={(next) => toggleEvent(ev.id, next)} label={`Enable ${ev.homeTeam} vs ${ev.awayTeam}`} />
                 <button
                   type="button"
+                  onClick={() => setStreamsTarget(ev)}
+                  className="neon-btn-ghost px-2.5 py-1.5"
+                  aria-label={`Manage streams for ${ev.homeTeam} vs ${ev.awayTeam}`}
+                  title="Manage streams"
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
                   onClick={() => setAlertTarget({ event: ev, isLive: true })}
                   className="neon-btn-ghost px-2.5 py-1.5"
                   aria-label={`Push alert for ${ev.homeTeam} vs ${ev.awayTeam}`}
@@ -804,6 +943,15 @@ export const EventsTab: React.FC<EventsTabProps> = ({
                 <NeonToggle on={ev.enabled} onChange={(next) => toggleEvent(ev.id, next)} label={`Enable ${ev.homeTeam} vs ${ev.awayTeam}`} />
                 <button
                   type="button"
+                  onClick={() => setStreamsTarget(ev)}
+                  className="neon-btn-ghost px-2.5 py-1.5"
+                  aria-label={`Manage streams for ${ev.homeTeam} vs ${ev.awayTeam}`}
+                  title="Manage streams"
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
                   onClick={() => setAlertTarget({ event: ev, isLive: false })}
                   className="neon-btn-ghost px-2.5 py-1.5"
                   aria-label={`Push alert for ${ev.homeTeam} vs ${ev.awayTeam}`}
@@ -830,6 +978,16 @@ export const EventsTab: React.FC<EventsTabProps> = ({
         <EventAlertModal
           target={alertTarget}
           onClose={() => setAlertTarget(null)}
+          onToast={onToast}
+        />
+      )}
+
+      {/* Streams manager modal */}
+      {streamsTarget && (
+        <EventStreamsModal
+          event={streamsTarget}
+          channels={channels}
+          onClose={() => setStreamsTarget(null)}
           onToast={onToast}
         />
       )}
@@ -1097,6 +1255,160 @@ const EventAlertModal: React.FC<{
           <button type="button" onClick={onClose} className="neon-btn-ghost px-3 py-2 text-[11px]">
             Cancel
           </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/** Attach extra streams to an event (alongside the imported primary). */
+const EventStreamsModal: React.FC<{
+  event: AdminLiveEvent | AdminUpcomingEvent;
+  channels: IptvChannel[];
+  onClose: () => void;
+  onToast: (msg: string, error?: boolean) => void;
+}> = ({ event, channels, onClose, onToast }) => {
+  const [rows, setRows] = useState<StreamRow[]>(() =>
+    (event.customStreams ?? []).map((s) => ({
+      title: s.title ?? '',
+      url: s.url,
+      userAgent: s.userAgent ?? '',
+      referer: s.referer ?? '',
+    })),
+  );
+  const [busy, setBusy] = useState(false);
+
+  const setRow = (idx: number, patch: Partial<StreamRow>) =>
+    setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await updateEvent(event.id, {
+        customStreams: rows
+          .filter((r) => r.url.trim())
+          .map((r) => ({
+            url: r.url.trim(),
+            title: r.title.trim() || undefined,
+            userAgent: r.userAgent.trim() || undefined,
+            referer: r.referer.trim() || undefined,
+          })),
+      });
+      onToast(`Streams saved — ${rows.filter((r) => r.url.trim()).length} extra stream(s) attached`);
+      onClose();
+    } catch (err) {
+      onToast((err as Error).message, true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Read-only sources that already feed the player.
+  const linkedChannels =
+    'channelIds' in event
+      ? (event.channelIds ?? []).map((id) => channels.find((c) => c.id === id)).filter(Boolean)
+      : [];
+  const primaryUrl = event.streamUrl || '';
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 px-4">
+      <div className="neon-card w-full max-w-2xl max-h-[85vh] overflow-y-auto p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-display font-extrabold text-sm text-slate-900">
+            Streams — {event.homeTeam} vs {event.awayTeam}
+          </h3>
+          <button type="button" onClick={onClose} className="neon-btn-ghost px-2 py-1" aria-label="Close">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* Existing sources */}
+        <div className="rounded-xl border border-white/70 bg-[#F4F8FF] p-3 space-y-1.5">
+          <p className="font-display font-bold text-[11px] text-slate-700">
+            Already attached (shown in the player's stream switcher)
+          </p>
+          <p className="text-[10.5px] text-slate-500 truncate">
+            • <strong>Primary stream</strong>{primaryUrl ? ` — ${primaryUrl}` : ' — none (add one below)'}
+          </p>
+          {linkedChannels.map((c) => (
+            <p key={c!.id} className="text-[10.5px] text-slate-500 truncate">
+              • <strong>{c!.name}</strong> (channel) — {c!.url}
+            </p>
+          ))}
+        </div>
+
+        {/* Extra streams editor */}
+        <div className="space-y-2">
+          {rows.length === 0 && (
+            <p className="text-[10.5px] text-slate-500">
+              No extra streams yet — add any stream URL (e.g. a backup M3U8) to appear in the
+              switcher next to the primary.
+            </p>
+          )}
+          {rows.map((row, idx) => (
+            <div key={idx} className="rounded-xl border border-white/70 bg-white/60 p-2.5 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="neon-badge shrink-0">Stream {idx + 1}</span>
+                <NeonInput
+                  value={row.title}
+                  onChange={(e) => setRow(idx, { title: e.target.value })}
+                  placeholder="Label shown in the switcher (optional)"
+                  className="flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => setRows((prev) => prev.filter((_, i) => i !== idx))}
+                  className="neon-btn-ghost neon-btn-danger px-2 py-1"
+                  aria-label="Remove stream"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <NeonInput
+                value={row.url}
+                onChange={(e) => setRow(idx, { url: e.target.value })}
+                placeholder="Stream URL (https://…/stream.m3u8)"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <NeonInput
+                  value={row.userAgent}
+                  onChange={(e) => setRow(idx, { userAgent: e.target.value })}
+                  placeholder="User-Agent (optional)"
+                />
+                <NeonInput
+                  value={row.referer}
+                  onChange={(e) => setRow(idx, { referer: e.target.value })}
+                  placeholder="Referer (optional)"
+                />
+              </div>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setRows((prev) => [...prev, emptyStreamRow()])}
+            className="neon-btn-ghost px-3 py-1.5 text-[11px]"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add stream
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void save()}
+            className="neon-btn neon-btn-accent px-4 py-2 text-[11px] disabled:opacity-60"
+          >
+            <Save className="w-3.5 h-3.5" />
+            {busy ? 'Saving…' : 'Save streams'}
+          </button>
+          <button type="button" onClick={onClose} className="neon-btn-ghost px-3 py-2 text-[11px]">
+            Cancel
+          </button>
+          <span className="text-[10px] text-slate-500">
+            Attached streams survive re-imports of the same fixture.
+          </span>
         </div>
       </div>
     </div>

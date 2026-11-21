@@ -200,6 +200,7 @@ function upcomingEventRecord(e: AdminUpcomingEvent) {
     time: e.time ?? '',
     streamUrl: e.streamUrl ?? null,
     customStreams: (e.customStreams ?? []) as unknown as Prisma.InputJsonValue,
+    channelIds: ((e as AdminUpcomingEvent).channelIds ?? null) as unknown as Prisma.InputJsonValue,
     headers: (e.headers ?? {}) as Prisma.InputJsonValue,
     status: e.status ?? null,
     startTimestampMs: e.startTimestampMs ? BigInt(Math.round(e.startTimestampMs)) : null,
@@ -225,6 +226,9 @@ const upcomingEventFromRow = (r: UpcomingEventRow): AdminUpcomingEvent => ({
         (x): x is NonNullable<AdminUpcomingEvent['customStreams']>[number] =>
           !!x && typeof x === 'object' && typeof (x as { url?: unknown }).url === 'string',
       )
+    : undefined,
+  channelIds: Array.isArray(r.channelIds)
+    ? (r.channelIds as unknown[]).map(String).filter(Boolean)
     : undefined,
   headers: headersOf(r.headers),
   status: (r.status as AdminUpcomingEvent['status']) ?? undefined,

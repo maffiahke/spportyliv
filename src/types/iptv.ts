@@ -114,6 +114,8 @@ export interface AdminUpcomingEvent {
   headers: StreamHeaders;
   /** Direct failover sources for imported matches (first mirrors streamUrl). */
   customStreams?: MatchStream[];
+  /** Channel-backed extra streams (playback order = array order). */
+  channelIds?: string[];
   status?: AdminEventStatus;
   /** Exact kickoff epoch ms from imported feeds (authoritative for time-based status). */
   startTimestampMs?: number;
