@@ -248,8 +248,13 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Leaving the player stops playback unless the user already opened PiP
+  // themselves via the PiP button — it never triggers automatically.
+  const leavePlayerWithoutPip = () =>
+    setActiveStream((prev) => (prev && prev.isPip ? prev : null));
+
   const handleSwitchTab = (tab: NavTab) => {
-    setActiveStream((prev) => (prev ? { ...prev, isPip: true } : null));
+    leavePlayerWithoutPip();
     setActiveTab(tab);
   };
 
@@ -405,7 +410,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => {
-              setActiveStream((prev) => (prev ? { ...prev, isPip: true } : null));
+              leavePlayerWithoutPip();
               setActiveTab('home');
               setSelectedSport('all');
               setSearchQuery('');
@@ -533,7 +538,7 @@ export default function App() {
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
-                  setActiveStream((prev) => (prev ? { ...prev, isPip: true } : null));
+                  leavePlayerWithoutPip();
                   if (activeTab !== 'home') setActiveTab('home');
                 }}
                 placeholder="Search teams, leagues, or sports (e.g., Real Madrid, Arsenal, NBA, F1)..."

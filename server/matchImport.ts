@@ -350,6 +350,13 @@ export function importMatchesIntoStore(
     result.upcomingCreated++;
   }
 
+  // Nearest kickoffs first, so the events with the most recent dates sit at
+  // the top of the admin lists (and the site) after an import.
+  const kickoffKey = (e: AdminLiveEvent | AdminUpcomingEvent): number =>
+    e.startTimestampMs ?? (e.dateKey ? Date.parse(e.dateKey) : Number.MAX_SAFE_INTEGER);
+  store.liveEvents.sort((a, b) => kickoffKey(a) - kickoffKey(b));
+  store.upcomingEvents.sort((a, b) => kickoffKey(a) - kickoffKey(b));
+
   return result;
 }
 

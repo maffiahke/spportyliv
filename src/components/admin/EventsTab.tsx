@@ -139,8 +139,12 @@ export const EventsTab: React.FC<EventsTabProps> = ({
   };
   const filterByDate = <T extends AdminLiveEvent | AdminUpcomingEvent>(events: T[]): T[] =>
     dateFilter ? events.filter((ev) => localDateKey(ev) === dateFilter) : events;
-  const filteredLiveEvents = filterByDate(liveEvents);
-  const filteredUpcomingEvents = filterByDate(upcomingEvents);
+  // Nearest kickoffs first (events with recent dates at the top).
+  const byKickoff = <T extends AdminLiveEvent | AdminUpcomingEvent>(a: T, b: T): number =>
+    (a.startTimestampMs ?? (Date.parse(a.dateKey ?? '') || Number.MAX_SAFE_INTEGER)) -
+    (b.startTimestampMs ?? (Date.parse(b.dateKey ?? '') || Number.MAX_SAFE_INTEGER));
+  const filteredLiveEvents = filterByDate([...liveEvents]).sort(byKickoff);
+  const filteredUpcomingEvents = filterByDate([...upcomingEvents]).sort(byKickoff);
 
   const bulkSetEnabled = async (on: boolean) => {
     if (busy || selectedIds.size === 0) return;
