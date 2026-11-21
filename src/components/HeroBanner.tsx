@@ -102,17 +102,19 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ slides, onAction }) => {
             {current.subtitleLine1} · {current.subtitleLine2}
           </p>
 
-          <button
-            type="button"
-            onClick={() => onAction(current.matchId)}
-            className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-[#FACC15] hover:bg-[#FDE047] active:scale-[0.98] transition-all px-3.5 py-1.5 min-h-[34px] text-slate-950 font-display font-extrabold text-xs sm:text-[13px] shadow-[0_4px_14px_rgba(250,204,21,0.38)] cursor-pointer whitespace-nowrap"
-          >
+          {current.matchId && (
+            <button
+              type="button"
+              onClick={() => onAction(current.matchId!)}
+              className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-[#FACC15] hover:bg-[#FDE047] active:scale-[0.98] transition-all px-3.5 py-1.5 min-h-[34px] text-slate-950 font-display font-extrabold text-xs sm:text-[13px] shadow-[0_4px_14px_rgba(250,204,21,0.38)] cursor-pointer whitespace-nowrap"
+            >
             <span className="w-4 h-4 rounded-full bg-slate-950 text-[#FACC15] flex items-center justify-center">
               <Play className="w-2 h-2 fill-current ml-0.5" />
             </span>
             <span>{current.ctaLabel}</span>
             <ChevronRight className="w-3.5 h-3.5 -ml-0.5 stroke-[2.6]" />
-          </button>
+            </button>
+          )}
         </div>
 
         {/* Right Athletic Trio Artwork (hidden when a photo hero is set) */}

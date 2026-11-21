@@ -14,12 +14,6 @@ import {
   TVChannel,
   UpcomingEvent,
 } from '../types/sports';
-import {
-  HERO_SLIDES as SAMPLE_HERO,
-  LIVE_MATCHES as SAMPLE_LIVE,
-  TV_CHANNELS as SAMPLE_TV,
-  UPCOMING_EVENTS as SAMPLE_UPCOMING,
-} from '../data/sportsData';
 
 /** Sport-tinted arena themes for dynamic IPTV events. */
 const SPORT_THEMES: Record<string, [string, string]> = {
@@ -39,14 +33,34 @@ export function adminEventToLiveMatch(
   channels: IptvChannel[] = [],
 ): LiveMatch {
   const [leftTheme, rightTheme] = SPORT_THEMES[ev.sport] ?? SPORT_THEMES.other;
-  // Channel-linked events follow the channel's stream (auto-sync aware).
-  const src = ev.channelId ? channels.find((c) => c.id === ev.channelId) : undefined;
-  const rawUrl = src?.url || ev.streamUrl;
-  const rawHeaders = src?.headers && Object.keys(src.headers).length > 0 ? src.headers : ev.headers;
-  // Never re-proxy an already-proxied URL (would break the format flag).
-  const streamUrl = rawUrl.startsWith('/api/iptv/stream')
-    ? rawUrl
-    : buildProxiedUrl(rawUrl, rawHeaders, isHlsUrl(rawUrl));
+
+  // Ordered failover sources: every referenced channel (auto-sync aware, each
+  // keeping its own headers), then any custom stream URL. Duplicates collapse.
+  const sourceIds = [
+    ...(ev.channelIds ?? []),
+    ...(ev.channelId && !(ev.channelIds ?? []).includes(ev.channelId) ? [ev.channelId] : []),
+  ];
+  const seenUrls = new Set<string>();
+  const streams: NonNullable<LiveMatch['streams']> = [];
+  for (const cid of sourceIds) {
+    const ch = channels.find((c) => c.id === cid);
+    if (!ch || seenUrls.has(ch.url)) continue;
+    seenUrls.add(ch.url);
+    streams.push({
+      id: `ch-${ch.id}`,
+      label: ch.name,
+      url: ch.url.startsWith('/api/iptv/stream') ? ch.url : buildProxiedUrl(ch.url, ch.headers, isHlsUrl(ch.url)),
+    });
+  }
+  const rawUrl = ev.streamUrl;
+  if (rawUrl && !seenUrls.has(rawUrl)) {
+    streams.push({
+      id: 'custom',
+      label: 'Primary stream',
+      url: rawUrl.startsWith('/api/iptv/stream') ? rawUrl : buildProxiedUrl(rawUrl, ev.headers, isHlsUrl(rawUrl)),
+    });
+  }
+  const streamUrl = streams[0]?.url ?? '';
   return {
     id: `iptv-ev-${ev.id}`,
     sport: ev.sport,
@@ -71,6 +85,7 @@ export function adminEventToLiveMatch(
     quality: ev.quality,
     viewers: ev.viewers || '—',
     videoUrl: streamUrl,
+    streams,
     leftTheme,
     rightTheme,
     venue: ev.venue || `${ev.league} Live`,
@@ -212,13 +227,10 @@ export function adminUpcomingToLiveMatch(
   };
 }
 
-function dedupeById<T extends { id: string }>(primary: T[], fallback: T[]): T[] {
-  // Admin-managed content replaces the built-in demo content when present;
-  // demo data only fills in while nothing has been imported yet.
-  if (primary.length === 0) return fallback;
+function dedupeById<T extends { id: string }>(items: T[]): T[] {
   // Duplicate ids would surface as duplicate React keys, so keep the first.
   const seen = new Set<string>();
-  return primary.filter((item) => {
+  return items.filter((item) => {
     if (seen.has(item.id)) return false;
     seen.add(item.id);
     return true;
@@ -239,22 +251,20 @@ export interface MergedAppContent {
 }
 
 /**
- * Merge admin-managed IPTV content with the built-in demo content.
- * Server content wins and appears first; demo content fills in behind it.
+ * Merge admin-managed IPTV content. Only channels, events and banners set up
+ * in the admin console are shown — no built-in demo/mock content.
  */
 export function mergeAppContent(data: AppData): MergedAppContent {
   const liveMatches = dedupeById(
     data.liveEvents
       .filter((e) => e.enabled && e.streamUrl)
       .map((e) => adminEventToLiveMatch(e, data.channels)),
-    SAMPLE_LIVE
   );
 
   const tvChannels = dedupeById(
     data.channels
       .filter((c) => c.enabled)
       .map(iptvChannelToTVChannel),
-    SAMPLE_TV
   );
 
   const enabledUpcoming = data.upcomingEvents.filter((e) => e.enabled);
@@ -279,17 +289,12 @@ export function mergeAppContent(data: AppData): MergedAppContent {
   const upcomingMatches = soonEntries.map(({ ev, kickoff }) =>
     adminUpcomingToLiveMatch(ev, kickoff)
   );
-  const hasAdminUpcoming = enabledUpcoming.length > 0;
-  const scheduledEvents = hasAdminUpcoming
-    ? laterEntries.map(adminUpcomingToUpcomingEvent)
-    : SAMPLE_UPCOMING;
+  const scheduledEvents = laterEntries.map(adminUpcomingToUpcomingEvent);
   const upcomingEvents = dedupeById(
     enabledUpcoming.map(adminUpcomingToUpcomingEvent),
-    SAMPLE_UPCOMING
   );
 
-  // Banners: admin banners first (mapped to their target event's playable match),
-  // then the built-in slides.
+  // Banners: only admin-created banners, mapped to their target event's playable match.
   const adminSlides: HeroSlide[] = data.banners
     .filter((b) => b.enabled)
     .map((b) => {
@@ -303,13 +308,13 @@ export function mergeAppContent(data: AppData): MergedAppContent {
         subtitleLine1: b.subtitleLine1,
         subtitleLine2: b.subtitleLine2,
         ctaLabel: b.ctaLabel,
-        matchId: targetEvent ? `iptv-ev-${targetEvent.id}` : (liveMatches[0]?.id ?? SAMPLE_LIVE[0].id),
+        matchId: targetEvent ? `iptv-ev-${targetEvent.id}` : liveMatches[0]?.id,
         bgGradient: b.bgGradient,
         imageUrl: b.imageUrl?.trim() || undefined,
       };
     });
 
-  const heroSlides = dedupeById(adminSlides, SAMPLE_HERO);
+  const heroSlides = dedupeById(adminSlides);
 
   const settings: SiteSettings = { ...DEFAULT_SITE_SETTINGS, ...(data.settings ?? {}) };
 

@@ -82,6 +82,21 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
   const [selectedQuality, setSelectedQuality] = useState<string | null>(null);
   const [activeLevel, setActiveLevel] = useState(-1);
 
+  // Multi-stream failover: admin events can carry several sources. The active
+  // one plays; when it fails, the player auto-advances to the next stream.
+  const streams = useMemo<NonNullable<LiveMatch['streams']>>(() => {
+    if (channel) {
+      return [{ id: `ch-${channel.id}`, label: channel.name, url: channel.streamUrl ?? '' }];
+    }
+    if (match.streams && match.streams.length > 0) return match.streams;
+    return match.videoUrl ? [{ id: 'primary', label: 'Primary stream', url: match.videoUrl }] : [];
+  }, [channel, match.id, match.streams, match.videoUrl]);
+  const [streamIndex, setStreamIndex] = useState(0);
+  useEffect(() => {
+    setStreamIndex(0);
+  }, [match.id, channel?.id]);
+  const safeStreamIndex = Math.min(streamIndex, Math.max(streams.length - 1, 0));
+
   const selectQuality = (label: string | null) => {
     const hls = hlsRef.current;
     if (!hls) return;
@@ -119,11 +134,31 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
     setRetryNonce((n) => n + 1);
   };
 
+  const hasNextStream = safeStreamIndex + 1 < streams.length;
+  const nextStreamLabel = hasNextStream ? streams[safeStreamIndex + 1].label : null;
+  const switchToNextStream = () => {
+    if (!hasNextStream) return;
+    setStreamState('loading');
+    setStreamIndex(safeStreamIndex + 1);
+    setRetryNonce((n) => n + 1);
+  };
+
+  // Auto-failover: when the active source fails and another one exists, give
+  // the current stream a few seconds (Retry still works) then move on.
+  useEffect(() => {
+    if (streamState !== 'error' || !hasNextStream) return;
+    const t = setTimeout(switchToNextStream, 4_000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamState, safeStreamIndex, streams.length, retryNonce]);
+
   const title = channel ? channel.name : match.league;
   const subtitle = channel ? channel.currentShow : match.venue;
   const currentSport = channel ? channel.sport : match.sport;
-  // IPTV channels carry their own proxied stream; matches use their event stream.
-  const videoUrl = channel?.streamUrl ?? match.videoUrl;
+  // IPTV channels carry their own proxied stream; events play the selected
+  // failover source (defaults to the primary). The switcher only appears when
+  // an event has more than one source.
+  const videoUrl = channel?.streamUrl ?? streams[safeStreamIndex]?.url ?? match.videoUrl;
 
   useEffect(() => {
     setCurrentTime(0);
@@ -416,7 +451,7 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
             </div>
           )}
 
-          {/* Error state with retry */}
+          {/* Error state with retry + failover */}
           {videoUrl && streamState === 'error' && (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-slate-950/70 px-6 text-center">
               <span className="w-9 h-9 rounded-full bg-rose-500/20 border border-rose-400/40 flex items-center justify-center text-rose-300 text-sm font-display font-black">
@@ -425,14 +460,30 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
               <span className="text-xs sm:text-sm font-display font-bold text-white/90">
                 Stream unavailable
               </span>
-              <button
-                type="button"
-                onClick={retryStream}
-                className="inline-flex items-center gap-1.5 rounded-full bg-[#1D6BFF] hover:bg-[#2563EB] text-white text-xs font-display font-bold px-4 py-2 shadow-lg cursor-pointer"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Retry
-              </button>
+              {nextStreamLabel ? (
+                <>
+                  <span className="text-[11px] font-display font-semibold text-white/70">
+                    Switching to “{nextStreamLabel}” automatically…
+                  </span>
+                  <button
+                    type="button"
+                    onClick={switchToNextStream}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-[#1D6BFF] hover:bg-[#2563EB] text-white text-xs font-display font-bold px-4 py-2 shadow-lg cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Switch now
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={retryStream}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-[#1D6BFF] hover:bg-[#2563EB] text-white text-xs font-display font-bold px-4 py-2 shadow-lg cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Retry
+                </button>
+              )}
             </div>
           )}
 
@@ -547,6 +598,36 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
               >
                 Auto
               </span>
+            )}
+
+            {/* Stream failover switcher: shown when the event carries multiple sources */}
+            {!channel && streams.length > 1 && (
+              <div
+                className="neu-inset-sm flex items-center rounded-full p-0.5 order-4 w-full sm:w-auto sm:order-none max-w-full overflow-x-auto no-scrollbar"
+                role="group"
+                aria-label="Stream source"
+              >
+                {streams.map((s, i) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      if (i === safeStreamIndex) return;
+                      setStreamState('loading');
+                      setStreamIndex(i);
+                      setRetryNonce((n) => n + 1);
+                    }}
+                    title={s.label}
+                    className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] sm:text-[10.5px] font-display font-bold transition-colors cursor-pointer ${
+                      i === safeStreamIndex
+                        ? 'bg-[#1D6BFF] text-white shadow-sm'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    {i === safeStreamIndex ? `● Stream ${i + 1}` : `Stream ${i + 1}`}
+                  </button>
+                ))}
+              </div>
             )}
 
             {/* Window controls */}

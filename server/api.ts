@@ -112,7 +112,8 @@ async function fetchPlaylistText(sourceUrl: string): Promise<string> {
  */
 async function syncPlaylistChannels(
   playlist: IptvPlaylist,
-): Promise<{ added: number; updated: number; removed: number }> {
+  opts: { testChannels?: boolean } = {},
+): Promise<{ added: number; updated: number; removed: number; tested?: number; alive?: number; dead?: number; deleted?: number }> {
   const text = playlist.sourceUrl
     ? await fetchPlaylistText(playlist.sourceUrl)
     : playlist.sourceContent ?? '';
@@ -164,7 +165,92 @@ async function syncPlaylistChannels(
   playlist.lastSyncedAt = new Date().toISOString();
   playlist.lastError = undefined;
   await saveStore();
-  return { added, updated: kept, removed };
+  // After every sync, probe every channel in the store: only HTTP 200 streams
+  // are kept — the rest are deleted automatically (see testAllChannels).
+  const health = opts.testChannels === false
+    ? undefined
+    : await testAllChannels();
+  return { added, updated: kept, removed, ...health };
+}
+
+/* ---------------- Channel health probing ----------------
+ * A channel is "alive" only when its stream URL answers HTTP 200. The probe
+ * follows redirects, cancels the body as soon as headers arrive (so video is
+ * never downloaded) and is capped by a global time budget so a large
+ * playlist cannot exceed a serverless invocation window.
+ */
+
+const PROBE_TIMEOUT_MS = 8_000;
+const PROBE_CONCURRENCY = 8;
+const PROBE_TOTAL_BUDGET_MS = 40_000;
+
+async function probeChannel(channel: IptvChannel): Promise<boolean> {
+  try {
+    const res = await fetch(channel.url, {
+      headers: buildUpstreamHeaders(channel.headers ?? {}, new URLSearchParams()),
+      redirect: 'follow',
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+    });
+    const ok = res.status === 200;
+    await res.body?.cancel();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Probe every channel in the store; dead ones are deleted automatically. */
+async function testAllChannels(
+  budgetMs = PROBE_TOTAL_BUDGET_MS,
+): Promise<{ tested: number; alive: number; dead: number; deleted: number }> {
+  const store = loadStore();
+  const channels = store.channels as IptvChannel[];
+  if (channels.length === 0) return { tested: 0, alive: 0, dead: 0, deleted: 0 };
+
+  const deadline = Date.now() + budgetMs;
+  let index = 0;
+  let tested = 0;
+  let alive = 0;
+  let dead = 0;
+
+  const runNext = async (): Promise<void> => {
+    while (index < channels.length && Date.now() <= deadline) {
+      const ch = channels[index++];
+      const ok = await probeChannel(ch);
+      ch.alive = ok;
+      ch.checkedAt = new Date().toISOString();
+      tested++;
+      if (ok) alive++;
+      else dead++;
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(PROBE_CONCURRENCY, channels.length) }, () => runNext()),
+  );
+
+  // Auto-delete every channel whose probe failed: only HTTP 200 streams are
+  // worth keeping. Channels the budget left untested keep their previous state
+  // and are re-probed on the next sync.
+  const removedIds = new Set(
+    (store.channels as IptvChannel[]).filter((c) => c.alive === false).map((c) => c.id),
+  );
+  if (removedIds.size > 0) {
+    store.channels = (store.channels as IptvChannel[]).filter(
+      (c) => !removedIds.has(c.id),
+    );
+    for (const p of store.playlists) {
+      const count = (store.channels as IptvChannel[]).filter(
+        (c) => c.playlistId === p.id,
+      ).length;
+      if (p.channelCount !== count) p.channelCount = count;
+    }
+  }
+  if (tested > 0 || removedIds.size > 0) await saveStore();
+  console.log(
+    `[health-check] tested ${tested}/${channels.length}: ${alive} alive, ${dead} dead, ${removedIds.size} deleted`,
+  );
+  return { tested, alive, dead, deleted: removedIds.size };
 }
 
 let autoSyncTimer: ReturnType<typeof setInterval> | null = null;
@@ -178,16 +264,16 @@ export function startAutoSync(intervalMs = 5 * 60 * 1000): void {
   console.log(`[auto-sync] scheduler running every ${Math.round(intervalMs / 60000)} min`);
 }
 
-export async function runAutoSync(): Promise<void> {
+export async function runAutoSync(): Promise<{ tested: number; alive: number; dead: number; deleted: number }> {
   // The store may still be loading on a cold start; the next tick picks it up.
   await ensureStoreReady();
   const store = loadStore();
   const due = store.playlists.filter((p: IptvPlaylist) => p.autoSync && p.enabled !== false);
-  if (due.length === 0) return;
+  if (due.length === 0) return { tested: 0, alive: 0, dead: 0, deleted: 0 };
   await Promise.all(
     due.map(async (p: IptvPlaylist) => {
       try {
-        const stats = await syncPlaylistChannels(p);
+        const stats = await syncPlaylistChannels(p, { testChannels: false });
         console.log(`[auto-sync] ${p.name}: +${stats.added} added, ${stats.removed} removed`);
         notifySyncChanges(p.name, stats.added, stats.removed);
       } catch (err) {
@@ -198,6 +284,9 @@ export async function runAutoSync(): Promise<void> {
       }
     }),
   );
+  // One full health pass for all channels after the sync batch, not per playlist.
+  const health = await testAllChannels();
+  return health;
 }
 
 export interface ImportResult {
@@ -891,12 +980,13 @@ export async function handleApiRequest(
       return true;
     }
     const startedAt = Date.now();
-    await runAutoSync();
+    const health = await runAutoSync();
     sendJson(res, 200, {
       ok: true,
       backend: storeBackend(),
       ms: Date.now() - startedAt,
       playlists: loadStore().playlists.filter((p) => p.autoSync && p.enabled !== false).length,
+      ...health,
     });
     return true;
   }
@@ -1135,6 +1225,9 @@ export async function handleApiRequest(
           homeLogoUrl: body.homeLogoUrl ? String(body.homeLogoUrl) : undefined,
           awayLogoUrl: body.awayLogoUrl ? String(body.awayLogoUrl) : undefined,
           channelId: body.channelId ? String(body.channelId) : undefined,
+          channelIds: Array.isArray(body.channelIds)
+            ? (body.channelIds as unknown[]).map((x) => String(x)).filter(Boolean)
+            : undefined,
           streamUrl: String(body.streamUrl ?? ''),
           headers,
           status: (body.status ? String(body.status) : 'live') as AdminLiveEvent['status'],
@@ -1142,20 +1235,24 @@ export async function handleApiRequest(
           time: body.time ? String(body.time) : undefined,
           enabled: body.enabled !== false,
         };
-        // When streaming from an existing channel, seed the stream fields from
-        // it as a fallback and keep channelId so playback follows auto-sync.
-        if (ev.channelId) {
-          const src = store.channels.find((c) => c.id === ev.channelId);
-          if (!src) {
-            sendJson(res, 400, { error: 'Selected channel not found' });
-            return true;
-          }
-          if (!ev.streamUrl) {
-            ev.streamUrl = src.url;
-            if (src.headers && Object.keys(src.headers).length > 0) ev.headers = src.headers;
-          }
+        // Failover sources: every referenced channel must exist. channelIds[0]
+        // is the primary and mirrors channelId; the rest are fallback streams.
+        const ids = [...new Set([...(ev.channelIds ?? []), ...(ev.channelId ? [ev.channelId] : [])])];
+        const unknown = ids.filter((cid) => !store.channels.some((c) => c.id === cid));
+        if (unknown.length > 0) {
+          sendJson(res, 400, { error: `Selected channel not found: ${unknown.join(', ')}` });
+          return true;
         }
-        if (!ev.streamUrl) {
+        ev.channelIds = ids;
+        ev.channelId = ids[0];
+        // When streaming from channels, seed the stream fields from the primary
+        // as a fallback and keep the ids so playback follows auto-sync.
+        if (ev.channelId && !ev.streamUrl) {
+          const src = store.channels.find((c) => c.id === ev.channelId)!;
+          ev.streamUrl = src.url;
+          if (src.headers && Object.keys(src.headers).length > 0) ev.headers = src.headers;
+        }
+        if (ids.length === 0 && !ev.streamUrl) {
           sendJson(res, 400, { error: 'Pick a channel or provide a stream URL for live events' });
           return true;
         }
@@ -1189,6 +1286,24 @@ export async function handleApiRequest(
       if (body.headers && typeof body.headers === 'object') target.headers = body.headers as StreamHeaders;
       if (typeof body.homeScore === 'number') (target as { homeScore?: number }).homeScore = body.homeScore;
       if (typeof body.awayScore === 'number') (target as { awayScore?: number }).awayScore = body.awayScore;
+      if (Array.isArray(body.channelIds) && 'channelId' in target) {
+        const liveEv = target as AdminLiveEvent;
+        const ids = [...new Set((body.channelIds as unknown[]).map((x) => String(x)).filter(Boolean))];
+        const unknown = ids.filter((cid) => !store.channels.some((c) => c.id === cid));
+        if (unknown.length > 0) {
+          sendJson(res, 400, { error: `Selected channel not found: ${unknown.join(', ')}` });
+          return true;
+        }
+        liveEv.channelIds = ids;
+        liveEv.channelId = ids[0];
+        // Keep a resolvable stream: seed from the new primary when the event has
+        // no custom URL of its own.
+        if (ids.length > 0 && !liveEv.streamUrl) {
+          const src = store.channels.find((c) => c.id === ids[0])!;
+          liveEv.streamUrl = src.url;
+          if (src.headers && Object.keys(src.headers).length > 0) liveEv.headers = src.headers;
+        }
+      }
       if (typeof body.quality === 'string' && (body.quality === '4K' || body.quality === 'HD')) {
         (target as { quality?: string }).quality = body.quality;
       }

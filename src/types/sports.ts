@@ -54,6 +54,9 @@ export interface LiveMatch {
   quality: 'HD' | '4K';
   viewers: string;
   videoUrl?: string;
+  /** Ordered failover sources for admin events: index 0 plays first; the player
+   * switches to the next entry when one fails. */
+  streams?: Array<{ id: string; label: string; url: string }>;
   leftTheme: string;
   rightTheme: string;
   venue: string;
@@ -131,7 +134,8 @@ export interface HeroSlide {
   subtitleLine1: string;
   subtitleLine2: string;
   ctaLabel: string;
-  matchId: string;
+  /** Target live match; a banner with no match (or none configured) hides its CTA. */
+  matchId?: string;
   bgGradient: string;
   /** Optional background photo; the gradient becomes a scrim over it. */
   imageUrl?: string;

@@ -49,6 +49,10 @@ export interface IptvChannel {
   shelf: 'featured' | 'recent' | 'popular';
   quality: '4K' | 'HD';
   enabled: boolean;
+  /** Health: true when the last probe after sync returned HTTP 200, false when it did not; missing = never tested. */
+  alive?: boolean;
+  /** ISO timestamp of the last post-sync health probe. */
+  checkedAt?: string;
 }
 
 /** Publication state of an admin-managed event. */
@@ -74,6 +78,9 @@ export interface AdminLiveEvent {
   awayLogoUrl?: string;
   /** Stream inherited from an existing IPTV channel (follows auto-sync). */
   channelId?: string;
+  /** Ordered failover list of channel references: first is primary, the rest are
+   * used when earlier streams fail. channelIds[0] mirrors channelId. */
+  channelIds?: string[];
   /** Publication state shown to viewers. */
   status?: AdminEventStatus;
   /** Event date (ISO yyyy-mm-dd) and kickoff time. */

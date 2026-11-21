@@ -189,6 +189,10 @@ export default function App() {
 
   const handleWatchMatchById = (matchId: string) => {
     const found = content.liveMatches.find((m) => m.id === matchId) || content.liveMatches[0];
+    if (!found) {
+      setToastMessage('No live events are set up yet');
+      return;
+    }
     openPlayerScreen(found, null);
   };
 

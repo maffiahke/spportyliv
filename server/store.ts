@@ -13,7 +13,6 @@ import {
   PushPrefs,
   SiteSettings,
 } from '../src/types/iptv.js';
-import { buildSeedUpcomingEvents } from '../src/data/seedEvents.js';
 import { hasDatabase, loadSnapshot, persistSnapshot, prisma, readRevision } from './db.js';
 
 export type { PushPrefs } from '../src/types/iptv.js';
@@ -76,7 +75,8 @@ const EMPTY: StoreData = {
   playlists: [],
   channels: [],
   liveEvents: [],
-  upcomingEvents: buildSeedUpcomingEvents(),
+  // Only admin-managed fixtures are shown; a fresh store starts empty.
+  upcomingEvents: [],
   banners: [],
   settings: { ...DEFAULT_SITE_SETTINGS },
   pushSubscriptions: [],
@@ -306,14 +306,22 @@ export async function syncFromDatabase(): Promise<boolean> {
 
 export function getAppData(includeDisabledPlaylistChannels = false): AppData {
   const store = loadStore();
-  const disabledPlaylistIds = includeDisabledPlaylistChannels
+  const includeAll = includeDisabledPlaylistChannels;
+  const disabledPlaylistIds = includeAll
     ? new Set<string>()
     : new Set(
         store.playlists.filter((p) => p.enabled === false).map((p) => p.id)
       );
   return {
     playlists: store.playlists,
-    channels: store.channels.filter((c) => !disabledPlaylistIds.has(c.playlistId)),
+    // Public feed only exposes channels whose last post-sync probe returned
+    // HTTP 200 (alive !== false; untested channels stay visible until the next
+    // sync). The admin feed (includeAll) sees everything.
+    channels: store.channels.filter(
+      (c) =>
+        !disabledPlaylistIds.has(c.playlistId) &&
+        (includeAll || c.alive !== false)
+    ),
     liveEvents: store.liveEvents,
     upcomingEvents: store.upcomingEvents,
     banners: store.banners,

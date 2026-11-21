@@ -54,6 +54,8 @@ model Channel {
   shelf      String  @default("recent")
   quality    String  @default("HD")
   enabled    Boolean @default(true)
+  alive      Boolean?
+  checkedAt  String? @map("checked_at")
 
   playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
 
@@ -78,6 +80,7 @@ model LiveEvent {
   homeLogoUrl String? @map("home_logo_url")
   awayLogoUrl String? @map("away_logo_url")
   channelId   String? @map("channel_id")
+  channelIds  Json    @default("[]") @map("channel_ids")
   status      String?
   dateKey     String? @map("date_key")
   time        String?

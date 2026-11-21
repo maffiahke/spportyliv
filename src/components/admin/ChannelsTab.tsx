@@ -311,6 +311,16 @@ export const ChannelsTab: React.FC<ChannelsTabProps> = ({ channels, onChanged, o
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-display font-bold text-xs text-slate-900 truncate">{c.name}</span>
                     <span className="neon-badge">{c.quality}</span>
+                    {c.alive === true && (
+                      <span className="neon-badge" style={{ color: '#16a34a' }} title={c.checkedAt ? `Checked ${new Date(c.checkedAt).toLocaleString()}` : undefined}>
+                        ● OK
+                      </span>
+                    )}
+                    {c.alive === false && (
+                      <span className="neon-badge" style={{ color: '#dc2626' }} title={c.checkedAt ? `Checked ${new Date(c.checkedAt).toLocaleString()} — stream did not return 200` : undefined}>
+                        ● Dead
+                      </span>
+                    )}
                     {c.group && <span className="neon-badge">{c.group}</span>}
                   </div>
                   <p className="mt-0.5 text-[10px] text-slate-500 truncate font-mono">{c.url}</p>

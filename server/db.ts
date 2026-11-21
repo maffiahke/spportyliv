@@ -72,6 +72,8 @@ function channelRecord(c: IptvChannel) {
     shelf: c.shelf,
     quality: c.quality,
     enabled: c.enabled !== false,
+    alive: c.alive ?? null,
+    checkedAt: c.checkedAt ?? null,
   };
 }
 
@@ -88,6 +90,8 @@ const channelFromRow = (r: ChannelRow): IptvChannel => ({
   shelf: r.shelf as IptvChannel['shelf'],
   quality: r.quality as IptvChannel['quality'],
   enabled: r.enabled,
+  alive: r.alive ?? undefined,
+  checkedAt: r.checkedAt ?? undefined,
 });
 
 function playlistRecord(p: IptvPlaylist) {
@@ -138,6 +142,7 @@ function liveEventRecord(e: AdminLiveEvent) {
     homeLogoUrl: e.homeLogoUrl ?? null,
     awayLogoUrl: e.awayLogoUrl ?? null,
     channelId: e.channelId ?? null,
+    channelIds: (e.channelIds?.length ? e.channelIds : e.channelId ? [e.channelId] : []) as Prisma.InputJsonValue,
     status: e.status ?? null,
     dateKey: e.dateKey ?? null,
     time: e.time ?? null,
@@ -162,6 +167,9 @@ const liveEventFromRow = (r: LiveEventRow): AdminLiveEvent => ({
   homeLogoUrl: r.homeLogoUrl ?? undefined,
   awayLogoUrl: r.awayLogoUrl ?? undefined,
   channelId: r.channelId ?? undefined,
+  channelIds: Array.isArray(r.channelIds)
+    ? (r.channelIds as unknown[]).filter((x): x is string => typeof x === 'string')
+    : undefined,
   status: (r.status as AdminLiveEvent['status']) ?? undefined,
   dateKey: r.dateKey ?? undefined,
   time: r.time ?? undefined,
@@ -479,25 +487,36 @@ export async function persistSnapshot(
   deleteMany(v.removed, (tx, ids) => tx.viewer.deleteMany({ where: { id: { in: ids } } }));
   deleteMany(ps.removed, (tx, ids) => tx.pushSubscription.deleteMany({ where: { id: { in: ids } } }));
 
+  /* Run the ops in short chunked transactions: a big playlist sync can queue
+   * hundreds of channel upserts, and one sequential round-trip per row blows
+   * past the transaction timeout on a pooled Neon connection (which then kills
+   * the whole batch with "Transaction not found"). Each chunk stays well under
+   * the limit; upserts and deleteMany are idempotent, so a mid-chunk failure
+   * is simply retried by the next save (lastPersisted is only advanced after
+   * everything below succeeds). */
+  const PERSIST_CHUNK = 40;
+  const txOptions = {
+    timeout: Number(process.env.STORE_PERSIST_TIMEOUT_MS ?? 30_000),
+    maxWait: 10_000,
+  };
+  for (let i = 0; i < ops.length; i += PERSIST_CHUNK) {
+    const chunk = ops.slice(i, i + PERSIST_CHUNK);
+    await prisma.$transaction(async (tx) => {
+      for (const op of chunk) await op(tx);
+    }, txOptions);
+  }
+
+  // Revision cursor: bumped only after every chunk has landed.
   const meta = await prisma.$transaction(
     async (tx) => {
-      if (ops.length > 0) {
-        // Create-only rows land before deletions so parents outlive children.
-        for (const op of ops) await op(tx);
-      }
       const now = new Date();
       return tx.storeMeta.upsert({
         where: { id: 1 },
         create: { id: 1, revision: 1, updatedAt: now },
-        update: { revision: { increment: 1 } },
+        update: { revision: { increment: 1 }, updatedAt: now },
       });
     },
-    // A first boot against Neon seeds every row in one transaction, which can
-    // exceed 30s on a cold compute or a high-latency pooled connection.
-    {
-      timeout: Number(process.env.STORE_PERSIST_TIMEOUT_MS ?? 30_000),
-      maxWait: 10_000,
-    },
+    txOptions,
   );
 
   return meta.revision;

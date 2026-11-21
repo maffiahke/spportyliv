@@ -43,7 +43,8 @@ interface EventFormState {
   status: AdminEventStatus;
   channel: string;
   streamMode: 'channel' | 'url';
-  channelId: string;
+  /** Ordered failover sources; selection order = playback order. */
+  channelIds: string[];
   streamUrl: string;
   headers: StreamHeaders;
 }
@@ -81,10 +82,14 @@ const emptyForm = (): EventFormState => ({
   status: 'live',
   channel: 'SportyLive 1 HD',
   streamMode: 'channel',
-  channelId: '',
+  channelIds: [],
   streamUrl: '',
   headers: {},
 });
+
+/** Toggle a channel in the ordered failover list (selection order preserved). */
+const toggleChannelId = (ids: string[], id: string): string[] =>
+  ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
 
 export const EventsTab: React.FC<EventsTabProps> = ({
   liveEvents,
@@ -107,9 +112,9 @@ export const EventsTab: React.FC<EventsTabProps> = ({
       onToast('Team names are required', true);
       return;
     }
-    const usingChannel = form.streamMode === 'channel' && !!form.channelId.trim();
-    if (form.kind === 'live' && !usingChannel && !form.streamUrl.trim()) {
-      onToast('Pick an existing channel or provide a stream URL', true);
+    const usingChannels = form.streamMode === 'channel' && form.channelIds.length > 0;
+    if (form.kind === 'live' && !usingChannels && !form.streamUrl.trim()) {
+      onToast('Pick at least one channel or provide a stream URL', true);
       return;
     }
     setBusy(true);
@@ -124,7 +129,7 @@ export const EventsTab: React.FC<EventsTabProps> = ({
           league: form.league.trim() || 'Friendly',
           headers: form.headers,
           streamUrl: form.streamUrl.trim(),
-          channelId: form.kind === 'live' && form.streamMode === 'channel' ? form.channelId.trim() : '',
+          channelIds: form.kind === 'live' && form.streamMode === 'channel' ? form.channelIds : [],
           status: form.status,
           dateKey: form.dateKey,
           time: form.time.trim(),
@@ -146,7 +151,7 @@ export const EventsTab: React.FC<EventsTabProps> = ({
         sport: form.sport as IptvSport,
         headers: form.headers,
         streamUrl: form.streamUrl.trim() || undefined,
-        channelId: form.kind === 'live' && usingChannel ? form.channelId.trim() : undefined,
+        channelIds: form.kind === 'live' && usingChannels ? form.channelIds : undefined,
         status: form.status,
         dateKey: form.dateKey,
         time: form.time.trim(),
@@ -219,8 +224,8 @@ export const EventsTab: React.FC<EventsTabProps> = ({
       time: ev.time || '',
       status: ev.status ?? (live ? 'live' : 'upcoming'),
       channel: 'channel' in ev ? ev.channel : 'SportyLive 1 HD',
-      streamMode: !live ? 'url' : ev.channelId ? 'channel' : 'url',
-      channelId: live ? ev.channelId || '' : '',
+      streamMode: !live ? 'url' : (ev as AdminLiveEvent).channelId || (ev as AdminLiveEvent).channelIds?.length ? 'channel' : 'url',
+      channelIds: live ? ((ev as AdminLiveEvent).channelIds?.length ? (ev as AdminLiveEvent).channelIds! : (ev as AdminLiveEvent).channelId ? [(ev as AdminLiveEvent).channelId!] : []) : [],
       streamUrl: ev.streamUrl ?? '',
       headers: ev.headers ?? {},
     });
@@ -321,16 +326,58 @@ export const EventsTab: React.FC<EventsTabProps> = ({
                 </NeonSelect>
               </NeonField>
               {form.streamMode === 'channel' ? (
-                <NeonField label="Channel" className="col-span-2">
-                  <NeonSelect value={form.channelId} onChange={(e) => set('channelId', e.target.value)}>
-                    <option value="">Select a channel…</option>
-                    {channels.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                        {c.group ? ` — ${c.group}` : ''}
-                      </option>
-                    ))}
-                  </NeonSelect>
+                <NeonField label="Stream Sources (order = failover order)" className="col-span-2">
+                  {channels.length === 0 ? (
+                    <p className="text-[10.5px] text-slate-500">Import a playlist first — no channels available.</p>
+                  ) : (
+                    <>
+                      {form.channelIds.length > 0 && (
+                        <p className="mb-1.5 text-[10.5px] text-slate-600 flex items-center flex-wrap gap-1">
+                          {form.channelIds.map((id, i) => {
+                            const ch = channels.find((c) => c.id === id);
+                            return ch ? <span key={id} className="neon-badge">{i + 1}. {ch.name}</span> : null;
+                          })}
+                        </p>
+                      )}
+                      <div
+                        role="group"
+                        aria-label="Stream sources"
+                        className="max-h-44 overflow-y-auto rounded-xl bg-[#EEF4FF] border border-white/85 shadow-[inset_2px_2px_6px_rgba(163,189,226,0.4),inset_-2px_-2px_6px_rgba(255,255,255,0.9)] p-2 space-y-0.5"
+                      >
+                        {channels.map((c) => {
+                          const order = form.channelIds.indexOf(c.id);
+                          const checked = order >= 0;
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              role="checkbox"
+                              aria-checked={checked}
+                              onClick={() => set('channelIds', toggleChannelId(form.channelIds, c.id))}
+                              className={`w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-display font-semibold transition-colors cursor-pointer ${
+                                checked ? 'bg-[#1D6BFF]/10 text-[#1D6BFF]' : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                            >
+                              <span
+                                className={`w-4 h-4 rounded-full shrink-0 flex items-center justify-center text-[8px] font-black ${
+                                  checked
+                                    ? 'bg-[#1D6BFF] text-white'
+                                    : 'bg-white border border-slate-300 text-transparent'
+                                }`}
+                              >
+                                {checked ? order + 1 : '✓'}
+                              </span>
+                              <span className="truncate">{c.name}</span>
+                              {c.group && <span className="ml-auto text-[9.5px] text-slate-400 truncate shrink-0">{c.group}</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="mt-1.5 text-[10.5px] text-slate-500">
+                        Tick channels in play order. The first is primary; if it fails, viewers are switched to the next one.
+                      </p>
+                    </>
+                  )}
                 </NeonField>
               ) : (
                 <NeonField label="IPTV Stream URL" className="col-span-2">
@@ -440,6 +487,11 @@ export const EventsTab: React.FC<EventsTabProps> = ({
                   <img src={ev.awayLogoUrl} alt="" className="w-6 h-6 rounded-full bg-white object-contain p-0.5 border border-white/80" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                 )}
                 {ev.channelId && <span className="neon-badge">via channel</span>}
+                {(ev.channelIds?.length ?? 0) > 1 && (
+                  <span className="neon-badge neon-badge-live" title="Failover: first is primary, rest are backups">
+                    {ev.channelIds!.length} streams
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => startEdit(ev)}
