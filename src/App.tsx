@@ -828,9 +828,6 @@ export default function App() {
                             <h2 className="font-display font-extrabold text-[20px] sm:text-[22px] text-slate-950 tracking-tight">
                               Upcoming
                             </h2>
-                            <p className="text-[11px] font-medium text-slate-500">
-                              Kickoff within 4 hours
-                            </p>
                           </div>
                         </div>
                         <span className="neu-inset-sm inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-display font-bold text-[#1D6BFF] whitespace-nowrap">
