@@ -370,7 +370,7 @@ export async function persistSnapshot(
 ): Promise<number> {
   if (!prisma) return 0;
 
-  type Op = (tx: Prisma.TransactionClient) => Promise<unknown>;
+  type Op = Prisma.PrismaPromise<any>;
   const ops: Op[] = [];
 
   const list = <T>(next: T[], prev: T[], key: (item: T) => string): { add: T[]; change: T[]; removed: string[] } => {
@@ -390,17 +390,17 @@ export async function persistSnapshot(
 
   const deleteMany = (
     ids: string[],
-    run: (tx: Prisma.TransactionClient, ids: string[]) => Promise<unknown>,
+    run: (ids: string[]) => Op,
   ): void => {
     if (ids.length === 0) return;
-    ops.push((tx) => run(tx, ids));
+    ops.push(run(ids));
   };
 
   /* playlists (parents) */
   const p = list(data.playlists, previous?.playlists ?? [], (x) => x.id);
   for (const row of [...p.add, ...p.change]) {
     const rec = playlistRecord(row);
-    ops.push((tx) => tx.playlist.upsert({ where: { id: row.id }, create: rec, update: rec }));
+    ops.push(prisma.playlist.upsert({ where: { id: row.id }, create: rec, update: rec }));
   }
 
 
@@ -408,7 +408,7 @@ export async function persistSnapshot(
   const c = list(data.channels, previous?.channels ?? [], (x) => x.id);
   for (const row of [...c.add, ...c.change]) {
     const rec = channelRecord(row);
-    ops.push((tx) => tx.channel.upsert({ where: { id: row.id }, create: rec, update: rec }));
+    ops.push(prisma.channel.upsert({ where: { id: row.id }, create: rec, update: rec }));
   }
 
 
@@ -416,14 +416,14 @@ export async function persistSnapshot(
   const l = list(data.liveEvents, previous?.liveEvents ?? [], (x) => x.id);
   for (const row of [...l.add, ...l.change]) {
     const rec = liveEventRecord(row);
-    ops.push((tx) => tx.liveEvent.upsert({ where: { id: row.id }, create: rec, update: rec }));
+    ops.push(prisma.liveEvent.upsert({ where: { id: row.id }, create: rec, update: rec }));
   }
 
 
   const u = list(data.upcomingEvents, previous?.upcomingEvents ?? [], (x) => x.id);
   for (const row of [...u.add, ...u.change]) {
     const rec = upcomingEventRecord(row);
-    ops.push((tx) => tx.upcomingEvent.upsert({ where: { id: row.id }, create: rec, update: rec }));
+    ops.push(prisma.upcomingEvent.upsert({ where: { id: row.id }, create: rec, update: rec }));
   }
 
 
@@ -431,7 +431,7 @@ export async function persistSnapshot(
   const b = list(data.banners, previous?.banners ?? [], (x) => x.id);
   for (const row of [...b.add, ...b.change]) {
     const rec = bannerRecord(row);
-    ops.push((tx) => tx.banner.upsert({ where: { id: row.id }, create: rec, update: rec }));
+    ops.push(prisma.banner.upsert({ where: { id: row.id }, create: rec, update: rec }));
   }
 
 
@@ -440,13 +440,13 @@ export async function persistSnapshot(
   const v = list(data.users, previous?.users ?? [], (x) => x.id);
   for (const row of [...v.add, ...v.change]) {
     const rec = viewerRecord(row);
-    ops.push((tx) => tx.viewer.upsert({ where: { id: row.id }, create: rec, update: rec }));
+    ops.push(prisma.viewer.upsert({ where: { id: row.id }, create: rec, update: rec }));
   }
 
   const s = list(data.userSessions, previous?.userSessions ?? [], (x) => x.tokenHash);
   for (const row of [...s.add, ...s.change]) {
     const rec = sessionRecord(row);
-    ops.push((tx) => tx.userSession.upsert({ where: { tokenHash: row.tokenHash }, create: rec, update: rec }));
+    ops.push(prisma.userSession.upsert({ where: { tokenHash: row.tokenHash }, create: rec, update: rec }));
   }
 
 
@@ -454,7 +454,7 @@ export async function persistSnapshot(
   const ps = list(data.pushSubscriptions, previous?.pushSubscriptions ?? [], (x) => x.id);
   for (const row of [...ps.add, ...ps.change]) {
     const rec = pushRecord(row);
-    ops.push((tx) => tx.pushSubscription.upsert({ where: { id: row.id }, create: rec, update: rec }));
+    ops.push(prisma.pushSubscription.upsert({ where: { id: row.id }, create: rec, update: rec }));
   }
 
 
@@ -474,36 +474,29 @@ export async function persistSnapshot(
       : undefined;
     if (JSON.stringify(prevValue) === JSON.stringify(value)) continue;
     const json = value as Prisma.InputJsonValue;
-    ops.push((tx) => tx.settingDoc.upsert({ where: { key }, create: { key, value: json }, update: { value: json } }));
+    ops.push(prisma.settingDoc.upsert({ where: { key }, create: { key, value: json }, update: { value: json } }));
   }
 
   /* deletions last: children before parents */
-  deleteMany(c.removed, (tx, ids) => tx.channel.deleteMany({ where: { id: { in: ids } } }));
-  deleteMany(p.removed, (tx, ids) => tx.playlist.deleteMany({ where: { id: { in: ids } } }));
-  deleteMany(l.removed, (tx, ids) => tx.liveEvent.deleteMany({ where: { id: { in: ids } } }));
-  deleteMany(u.removed, (tx, ids) => tx.upcomingEvent.deleteMany({ where: { id: { in: ids } } }));
-  deleteMany(b.removed, (tx, ids) => tx.banner.deleteMany({ where: { id: { in: ids } } }));
-  deleteMany(s.removed, (tx, ids) => tx.userSession.deleteMany({ where: { tokenHash: { in: ids } } }));
-  deleteMany(v.removed, (tx, ids) => tx.viewer.deleteMany({ where: { id: { in: ids } } }));
-  deleteMany(ps.removed, (tx, ids) => tx.pushSubscription.deleteMany({ where: { id: { in: ids } } }));
+  deleteMany(c.removed, (ids) => prisma.channel.deleteMany({ where: { id: { in: ids } } }));
+  deleteMany(p.removed, (ids) => prisma.playlist.deleteMany({ where: { id: { in: ids } } }));
+  deleteMany(l.removed, (ids) => prisma.liveEvent.deleteMany({ where: { id: { in: ids } } }));
+  deleteMany(u.removed, (ids) => prisma.upcomingEvent.deleteMany({ where: { id: { in: ids } } }));
+  deleteMany(b.removed, (ids) => prisma.banner.deleteMany({ where: { id: { in: ids } } }));
+  deleteMany(s.removed, (ids) => prisma.userSession.deleteMany({ where: { tokenHash: { in: ids } } }));
+  deleteMany(v.removed, (ids) => prisma.viewer.deleteMany({ where: { id: { in: ids } } }));
+  deleteMany(ps.removed, (ids) => prisma.pushSubscription.deleteMany({ where: { id: { in: ids } } }));
 
-  /* Run the ops in short chunked transactions: a big playlist sync can queue
-   * hundreds of channel upserts, and one sequential round-trip per row blows
-   * past the transaction timeout on a pooled Neon connection (which then kills
-   * the whole batch with "Transaction not found"). Each chunk stays well under
-   * the limit; upserts and deleteMany are idempotent, so a mid-chunk failure
-   * is simply retried by the next save (lastPersisted is only advanced after
-   * everything below succeeds). */
-  const PERSIST_CHUNK = 40;
-  const txOptions = {
-    timeout: Number(process.env.STORE_PERSIST_TIMEOUT_MS ?? 30_000),
-    maxWait: 10_000,
-  };
+  /* Execute the ops as batch transactions (array form): Prisma pipelines the
+   * whole chunk in a single request instead of one interactive round-trip per
+   * row, which is what made large syncs blow the transaction timeout on the
+   * pooled Neon connection ("Transaction not found"). Upserts and deleteMany
+   * are idempotent, so a mid-chunk failure is simply retried by the next save
+   * (lastPersisted is only advanced after everything below succeeds). */
+  const PERSIST_CHUNK = 50;
   for (let i = 0; i < ops.length; i += PERSIST_CHUNK) {
     const chunk = ops.slice(i, i + PERSIST_CHUNK);
-    await prisma.$transaction(async (tx) => {
-      for (const op of chunk) await op(tx);
-    }, txOptions);
+    await prisma.$transaction(chunk);
   }
 
   // Revision cursor: bumped only after every chunk has landed.
@@ -516,7 +509,7 @@ export async function persistSnapshot(
         update: { revision: { increment: 1 }, updatedAt: now },
       });
     },
-    txOptions,
+    { timeout: Number(process.env.STORE_PERSIST_TIMEOUT_MS ?? 30_000) },
   );
 
   return meta.revision;

@@ -269,7 +269,16 @@ export function saveStore(): Promise<void> {
   const snapshot = structuredClone(cache);
   const run = persistChain.then(async () => {
     if (hasDatabase) {
-      revision = await persistSnapshot(snapshot, lastPersisted);
+      // One retry: a pooled Neon connection can drop mid-batch (P2028). The
+      // diff is idempotent, so simply re-persisting against lastPersisted
+      // heals a partial chunk.
+      try {
+        revision = await persistSnapshot(snapshot, lastPersisted);
+      } catch (err) {
+        console.warn('[store] persist failed, retrying once:', (err as Error).message);
+        await new Promise((r) => setTimeout(r, 1_000));
+        revision = await persistSnapshot(snapshot, lastPersisted);
+      }
     } else {
       writeJsonStore(snapshot);
       revision += 1;

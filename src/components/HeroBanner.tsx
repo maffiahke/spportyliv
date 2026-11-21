@@ -12,14 +12,17 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ slides, onAction }) => {
   const [isPlaying, setIsPlaying] = useState(true);
 
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!isPlaying || slides.length === 0) return;
     const timer = window.setInterval(() => {
       setActiveIndex((prev) => (prev + 1) % slides.length);
     }, 5500);
     return () => window.clearInterval(timer);
   }, [isPlaying, slides.length]);
 
-  const current = slides[activeIndex];
+  if (slides.length === 0) return null;
+  // Keep the index in range even if the slide list shrinks while mounted.
+  const safeIndex = ((activeIndex % slides.length) + slides.length) % slides.length;
+  const current = slides[safeIndex];
 
   return (
     <div className="neu-surface rounded-[28px] p-1.5 sm:p-2">

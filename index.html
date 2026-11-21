@@ -15,6 +15,15 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Temporary error trap: surfaces boot crashes in document.title.
+      window.addEventListener('error', function (e) {
+        document.title = 'ERR: ' + (e.error && e.error.stack ? e.error.stack.slice(0, 400) : e.message);
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        document.title = 'REJ: ' + String((e.reason && e.reason.stack) || e.reason).slice(0, 400);
+      });
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

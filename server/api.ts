@@ -259,7 +259,11 @@ let autoSyncTimer: ReturnType<typeof setInterval> | null = null;
 export function startAutoSync(intervalMs = 5 * 60 * 1000): void {
   if (autoSyncTimer) return;
   autoSyncTimer = setInterval(() => {
-    void runAutoSync();
+    // The interval callback must never surface an unhandled rejection — a
+    // failed save here used to crash the whole process.
+    void runAutoSync().catch((err) =>
+      console.error('[auto-sync] run failed:', (err as Error).message),
+    );
   }, intervalMs);
   console.log(`[auto-sync] scheduler running every ${Math.round(intervalMs / 60000)} min`);
 }
