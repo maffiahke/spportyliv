@@ -39,6 +39,33 @@ function headersFromMatchStream(s: MatchStream): StreamHeaders {
   return out;
 }
 
+const VIEWERS_MIN = 120;
+const VIEWERS_MAX = 5000;
+
+/** Deterministic 32-bit hash for seeding viewer counts per event. */
+function hashSeed(seed: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/**
+ * Plausible viewer count for live events (VIEWERS_MIN–VIEWERS_MAX):
+ * a stable per-event base that drifts gently on each re-merge so it
+ * reads as live activity rather than a frozen number.
+ */
+export function fakeLiveViewers(seed: string): string {
+  const h = hashSeed(seed);
+  const base = VIEWERS_MIN + (h % (VIEWERS_MAX - VIEWERS_MIN + 1));
+  const phase = (h % 1000) / 1000 * Math.PI * 2;
+  const drift = Math.sin(Date.now() / 45_000 + phase) * base * 0.05;
+  const viewers = Math.round(Math.min(VIEWERS_MAX, Math.max(VIEWERS_MIN, base + drift)));
+  return viewers.toLocaleString('en-US');
+}
+
 /** Exact kickoff epoch for an event: feed timestamp first, date+time fallback. */
 export function eventStartMs(ev: {
   startTimestampMs?: number;
@@ -146,7 +173,9 @@ export function adminEventToLiveMatch(
         }
       })(),
     quality: ev.quality,
-    viewers: ev.viewers || '—',
+    // Admin-set value wins; otherwise a plausible fake count so live cards
+    // never show an empty/“—” viewers figure.
+    viewers: ev.viewers || fakeLiveViewers(ev.id),
     videoUrl: streamUrl,
     streams,
     leftTheme,
@@ -297,7 +326,7 @@ export function adminUpcomingToLiveMatch(
     statusLabel: opts.asLive ? 'LIVE' : 'UPCOMING',
     isUpcoming: !opts.asLive,
     quality: 'HD',
-    viewers: '',
+    viewers: opts.asLive ? fakeLiveViewers(ev.id) : '',
     videoUrl: streamUrl,
     streams,
     leftTheme,
