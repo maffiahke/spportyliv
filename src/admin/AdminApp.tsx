@@ -13,6 +13,7 @@ import {
   Settings,
   ShieldCheck,
   Tv,
+  Users,
   X,
 } from 'lucide-react';
 import {
@@ -40,6 +41,7 @@ import { BannersTab } from '../components/admin/BannersTab';
 import { DashboardTab } from '../components/admin/DashboardTab';
 import { SettingsTab } from '../components/admin/SettingsTab';
 import { NotificationsTab } from '../components/admin/NotificationsTab';
+import { UsersTab } from '../components/admin/UsersTab';
 
 type AdminTab =
   | 'dashboard'
@@ -47,6 +49,7 @@ type AdminTab =
   | 'channels'
   | 'events'
   | 'banners'
+  | 'users'
   | 'notifications'
   | 'settings';
 
@@ -201,6 +204,7 @@ const AdminConsole: React.FC<ConsoleProps> = ({ onLogout }) => {
     { id: 'channels', label: 'Live TV', hint: 'Channels & headers', icon: Tv, badge: channels.length },
     { id: 'events', label: 'Events', hint: 'Live & fixtures', icon: CalendarClock, badge: liveEvents.length + upcomingEvents.length },
     { id: 'banners', label: 'Banners', hint: 'Hero carousel', icon: ImageIcon, badge: banners.length },
+    { id: 'users', label: 'Users', hint: 'Registered viewers', icon: Users, badge: undefined as unknown as number },
     { id: 'notifications', label: 'Notifications', hint: 'Browser push alerts', icon: BellRing, badge: undefined as unknown as number },
     { id: 'settings', label: 'Settings', hint: 'Contacts & site info', icon: Settings, badge: undefined as unknown as number },
   ];
@@ -387,6 +391,8 @@ const AdminConsole: React.FC<ConsoleProps> = ({ onLogout }) => {
             />
           ) : tab === 'notifications' ? (
             <NotificationsTab onToast={showToast} />
+          ) : tab === 'users' ? (
+            <UsersTab onToast={showToast} />
           ) : tab === 'settings' ? (
             <SettingsTab
               settings={settings}

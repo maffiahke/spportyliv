@@ -1698,6 +1698,24 @@ export async function handleApiRequest(
     return true;
   }
 
+  // ---------------- Registered viewers (site users) ----------------
+  if (path === '/api/admin/users' && method === 'GET') {
+    const users = [...loadStore().users]
+      .filter((u) => u && u.id)
+      .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+    sendJson(res, 200, {
+      total: users.length,
+      // Never expose password material.
+      users: users.map((u) => ({
+        id: u.id,
+        username: u.username,
+        country: u.country,
+        createdAt: u.createdAt,
+      })),
+    });
+    return true;
+  }
+
   // ---------------- Site settings ----------------
   if (path === '/api/admin/settings' && method === 'GET') {
     sendJson(res, 200, store.settings);

@@ -337,6 +337,19 @@ export function sendBroadcastPush(payload: {
   }).then((r) => j<PushAlertResult>(r));
 }
 
+export interface AdminUserRecord {
+  id: string;
+  username: string;
+  country: string;
+  createdAt: string;
+}
+
+export function fetchAdminUsers(): Promise<{ total: number; users: AdminUserRecord[] }> {
+  return fetch('/api/admin/users', { headers: authHeaders(), cache: 'no-store' }).then((r) =>
+    j<{ total: number; users: AdminUserRecord[] }>(r)
+  );
+}
+
 export function updatePushPrefs(patch: Partial<PushPrefs>): Promise<PushPrefs> {
   return fetch('/api/admin/push/prefs', {
     method: 'PATCH',
