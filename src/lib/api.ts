@@ -199,6 +199,14 @@ export function deleteEvent(id: string): Promise<void> {
   );
 }
 
+export function deleteEvents(ids: string[]): Promise<{ ok: boolean; deleted: number }> {
+  return fetch('/api/admin/events/delete-many', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ ids }),
+  }).then((r) => j<{ ok: boolean; deleted: number }>(r));
+}
+
 export interface MatchImportStats {
   ok: boolean;
   format: 'json' | 'm3u';

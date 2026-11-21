@@ -8,7 +8,7 @@ import {
   IptvSport,
   StreamHeaders,
 } from '../../types/iptv';
-import { createEvent, deleteEvent, importMatches, updateEvent } from '../../lib/api';
+import { createEvent, deleteEvent, deleteEvents, importMatches, updateEvent } from '../../lib/api';
 import { computeEventStatus } from '../../lib/appData';
 import { HeadersEditor, NeonField, NeonInput, NeonSelect, NeonToggle } from './ui';
 
@@ -137,6 +137,22 @@ export const EventsTab: React.FC<EventsTabProps> = ({
     } catch (err) {
       onToast((err as Error).message, true);
       onChanged();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const bulkDelete = async () => {
+    if (busy || selectedIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.size} event${selectedIds.size === 1 ? '' : 's'} permanently?`)) return;
+    setBusy(true);
+    try {
+      const res = await deleteEvents([...selectedIds]);
+      onToast(`Deleted ${res.deleted} event${res.deleted === 1 ? '' : 's'}`);
+      setSelectedIds(new Set());
+      onChanged();
+    } catch (err) {
+      onToast((err as Error).message, true);
     } finally {
       setBusy(false);
     }
@@ -326,6 +342,15 @@ export const EventsTab: React.FC<EventsTabProps> = ({
             className="neon-btn-ghost px-3 py-1.5 text-[11px] disabled:opacity-60"
           >
             Disable selected
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void bulkDelete()}
+            className="neon-btn-ghost neon-btn-danger px-3 py-1.5 text-[11px] disabled:opacity-60"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete selected
           </button>
           <button
             type="button"

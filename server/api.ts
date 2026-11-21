@@ -1232,6 +1232,31 @@ export async function handleApiRequest(
     return true;
   }
 
+  // ---------------- Bulk delete events ----------------
+  if (path === '/api/admin/events/delete-many' && method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req)) as { ids?: unknown };
+      const ids = Array.isArray(body.ids)
+        ? [...new Set((body.ids as unknown[]).map((x) => String(x)).filter(Boolean))]
+        : [];
+      if (ids.length === 0) {
+        sendJson(res, 400, { error: 'No event ids provided' });
+        return true;
+      }
+      const idSet = new Set(ids);
+      const beforeL = store.liveEvents.length;
+      const beforeU = store.upcomingEvents.length;
+      store.liveEvents = store.liveEvents.filter((e) => !idSet.has(e.id));
+      store.upcomingEvents = store.upcomingEvents.filter((e) => !idSet.has(e.id));
+      const deleted = beforeL - store.liveEvents.length + beforeU - store.upcomingEvents.length;
+      await saveStore();
+      sendJson(res, 200, { ok: true, deleted, missing: ids.length - deleted });
+    } catch (err) {
+      sendJson(res, 400, { error: (err as Error).message });
+    }
+    return true;
+  }
+
   if (path === '/api/admin/events' && method === 'POST') {
     try {
       const body = JSON.parse(await readBody(req)) as Record<string, unknown>;
