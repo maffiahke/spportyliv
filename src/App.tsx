@@ -844,9 +844,6 @@ export default function App() {
                           <h2 className="font-display font-extrabold text-[20px] sm:text-[22px] text-slate-950 tracking-tight">
                             Scheduled
                           </h2>
-                          <p className="text-[11px] font-medium text-slate-500">
-                            5+ hours to kickoff
-                          </p>
                         </div>
                       </div>
 
