@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Bell, CalendarClock, Check, Layers, Pencil, Plus, Radio, RotateCcw, Save, Send, Trash2, Upload, X } from 'lucide-react';
+import { Bell, CalendarClock, Check, Layers, Pencil, Plus, Radio, RotateCcw, Save, Search, Send, Trash2, Upload, X } from 'lucide-react';
 import {
   AdminEventStatus,
   AdminLiveEvent,
@@ -97,9 +97,11 @@ interface StreamRow {
   url: string;
   userAgent: string;
   referer: string;
+  /** When set, this slot plays an existing channel instead of the URL. */
+  channelId: string;
 }
 
-const emptyStreamRow = (): StreamRow => ({ title: '', url: '', userAgent: '', referer: '' });
+const emptyStreamRow = (): StreamRow => ({ title: '', url: '', userAgent: '', referer: '', channelId: '' });
 
 const toStreamRows = (streams: AdminLiveEvent['customStreams']): StreamRow[] =>
   (streams ?? []).map((s) => ({
@@ -107,11 +109,88 @@ const toStreamRows = (streams: AdminLiveEvent['customStreams']): StreamRow[] =>
     url: s.url,
     userAgent: s.userAgent ?? '',
     referer: s.referer ?? '',
+    channelId: s.channelId ?? '',
   }));
 
 /** Toggle a channel in the ordered failover list (selection order preserved). */
 const toggleChannelId = (ids: string[], id: string): string[] =>
   ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
+
+/** Searchable single-select channel picker (used by stream-slot rows). */
+const ChannelSearchPicker: React.FC<{
+  channels: IptvChannel[];
+  value: string;
+  onChange: (channelId: string) => void;
+}> = ({ channels, value, onChange }) => {
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+  const selected = channels.find((c) => c.id === value);
+  const filtered = q
+    ? channels.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          (c.group ?? '').toLowerCase().includes(q),
+      )
+    : channels.slice(0, 60);
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search channels…"
+            aria-label="Search channels"
+            className="w-full rounded-lg bg-[#EEF4FF] border border-white/85 shadow-[inset_2px_2px_6px_rgba(163,189,226,0.4),inset_-2px_-2px_6px_rgba(255,255,255,0.9)] pl-8 pr-2.5 py-1.5 text-[11px] text-slate-800 outline-none focus:border-[#1D6BFF]/60"
+          />
+        </div>
+        {selected && (
+          <span className="neon-badge shrink-0 max-w-[45%] truncate">✓ {selected.name}</span>
+        )}
+      </div>
+      <div
+        role="listbox"
+        aria-label="Existing channels"
+        className="max-h-36 overflow-y-auto rounded-xl bg-[#EEF4FF] border border-white/85 shadow-[inset_2px_2px_6px_rgba(163,189,226,0.4),inset_-2px_-2px_6px_rgba(255,255,255,0.9)] p-1.5 space-y-0.5"
+      >
+        {filtered.length === 0 && (
+          <p className="px-2 py-1.5 text-[10.5px] text-slate-500">No channels match “{query}”.</p>
+        )}
+        {filtered.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            role="option"
+            aria-selected={c.id === value}
+            onClick={() => onChange(c.id === value ? '' : c.id)}
+            className={`w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-display font-semibold transition-colors cursor-pointer ${
+              c.id === value ? 'bg-[#1D6BFF]/10 text-[#1D6BFF]' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <span
+              className={`w-4 h-4 rounded-full shrink-0 flex items-center justify-center text-[8px] font-black ${
+                c.id === value
+                  ? 'bg-[#1D6BFF] text-white'
+                  : 'bg-white border border-slate-300 text-transparent'
+              }`}
+            >
+              ✓
+            </span>
+            <span className="truncate">{c.name}</span>
+            {c.group && (
+              <span className="ml-auto text-[9.5px] text-slate-400 truncate shrink-0">{c.group}</span>
+            )}
+          </button>
+        ))}
+        {!q && channels.length > 60 && (
+          <p className="px-2 py-1 text-[9.5px] text-slate-400">Type to search all {channels.length} channels…</p>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export const EventsTab: React.FC<EventsTabProps> = ({
   liveEvents,
@@ -135,6 +214,8 @@ export const EventsTab: React.FC<EventsTabProps> = ({
   } | null>(null);
   // Streams manager modal (attach extra streams alongside the imported one).
   const [streamsTarget, setStreamsTarget] = useState<AdminLiveEvent | AdminUpcomingEvent | null>(null);
+  // Search filter for the "Use existing channel" multi-select.
+  const [channelSearch, setChannelSearch] = useState('');
   const formRef = useRef<HTMLFormElement>(null);
   const set = <K extends keyof EventFormState>(key: K, value: EventFormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -225,12 +306,13 @@ export const EventsTab: React.FC<EventsTabProps> = ({
     }
     const usingChannels = form.streamMode === 'channel' && form.channelIds.length > 0;
     const extraStreams = form.customStreams
-      .filter((r) => r.url.trim())
+      .filter((r) => r.channelId.trim() || r.url.trim())
       .map((r) => ({
-        url: r.url.trim(),
+        url: r.channelId.trim() ? '' : r.url.trim(),
+        channelId: r.channelId.trim() || undefined,
         title: r.title.trim() || undefined,
-        userAgent: r.userAgent.trim() || undefined,
-        referer: r.referer.trim() || undefined,
+        userAgent: r.channelId.trim() ? undefined : r.userAgent.trim() || undefined,
+        referer: r.channelId.trim() ? undefined : r.referer.trim() || undefined,
       }));
     if (form.kind === 'live' && !usingChannels && !form.streamUrl.trim()) {
       onToast('Pick at least one channel or provide a stream URL', true);
@@ -363,7 +445,16 @@ export const EventsTab: React.FC<EventsTabProps> = ({
   };
 
   /** Channel multi-select used by both live events and upcoming fixtures. */
-  const renderChannelMultiSelect = (label: string, hint: string) => (
+  const renderChannelMultiSelect = (label: string, hint: string) => {
+    const q = channelSearch.trim().toLowerCase();
+    const visibleChannels = q
+      ? channels.filter(
+          (c) =>
+            c.name.toLowerCase().includes(q) ||
+            (c.group ?? '').toLowerCase().includes(q),
+        )
+      : channels;
+    return (
     <NeonField label={label} className="col-span-2">
       {channels.length === 0 ? (
         <p className="text-[10.5px] text-slate-500">Import a playlist first — no channels available.</p>
@@ -377,12 +468,26 @@ export const EventsTab: React.FC<EventsTabProps> = ({
               })}
             </p>
           )}
+          <div className="relative mb-1.5">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={channelSearch}
+              onChange={(e) => setChannelSearch(e.target.value)}
+              placeholder={`Search ${channels.length} channels by name or group…`}
+              aria-label="Search existing channels"
+              className="w-full rounded-xl bg-[#EEF4FF] border border-white/85 shadow-[inset_2px_2px_6px_rgba(163,189,226,0.4),inset_-2px_-2px_6px_rgba(255,255,255,0.9)] pl-8 pr-2.5 py-2 text-[11px] text-slate-800 outline-none focus:border-[#1D6BFF]/60"
+            />
+          </div>
           <div
             role="group"
             aria-label="Stream sources"
             className="max-h-44 overflow-y-auto rounded-xl bg-[#EEF4FF] border border-white/85 shadow-[inset_2px_2px_6px_rgba(163,189,226,0.4),inset_-2px_-2px_6px_rgba(255,255,255,0.9)] p-2 space-y-0.5"
           >
-            {channels.map((c) => {
+            {visibleChannels.length === 0 && (
+              <p className="px-2 py-1.5 text-[10.5px] text-slate-500">No channels match “{channelSearch}”.</p>
+            )}
+            {visibleChannels.map((c) => {
               const order = form.channelIds.indexOf(c.id);
               const checked = order >= 0;
               return (
@@ -415,7 +520,8 @@ export const EventsTab: React.FC<EventsTabProps> = ({
         </>
       )}
     </NeonField>
-  );
+    );
+  };
 
   /** Extra stream-link rows (customStreams) — shared by live + upcoming forms. */
   const renderStreamLinks = () => (
@@ -429,10 +535,44 @@ export const EventsTab: React.FC<EventsTabProps> = ({
           manually switch to alongside the main stream.
         </p>
       )}
-      {form.customStreams.map((row, idx) => (
+      {form.customStreams.map((row, idx) => {
+        const channelMode = Boolean(row.channelId.trim());
+        return (
         <div key={idx} className="rounded-xl border border-white/70 bg-white/60 p-2.5 space-y-2">
           <div className="flex items-center gap-2">
             <span className="neon-badge shrink-0">Stream {idx + 1}</span>
+            <div className="neu-inset-sm flex items-center rounded-full p-0.5 shrink-0">
+              <button
+                type="button"
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    customStreams: f.customStreams.map((r, i) => (i === idx ? { ...r, channelId: '' } : r)),
+                  }))
+                }
+                aria-pressed={!channelMode}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-display font-bold transition-colors cursor-pointer ${
+                  !channelMode ? 'bg-[#1D6BFF] text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Custom URL
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    customStreams: f.customStreams.map((r, i) => (i === idx ? { ...r, channelId: ' ' } : r)),
+                  }))
+                }
+                aria-pressed={channelMode}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-display font-bold transition-colors cursor-pointer ${
+                  channelMode ? 'bg-[#1D6BFF] text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Existing channel
+              </button>
+            </div>
             <NeonInput
               value={row.title}
               onChange={(e) =>
@@ -454,40 +594,56 @@ export const EventsTab: React.FC<EventsTabProps> = ({
               <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
-          <NeonInput
-            value={row.url}
-            onChange={(e) =>
-              setForm((f) => ({
-                ...f,
-                customStreams: f.customStreams.map((r, i) => (i === idx ? { ...r, url: e.target.value } : r)),
-              }))
-            }
-            placeholder="Stream URL (https://…/stream.m3u8)"
-          />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <NeonInput
-              value={row.userAgent}
-              onChange={(e) =>
+          {channelMode ? (
+            <ChannelSearchPicker
+              channels={channels}
+              value={row.channelId.trim()}
+              onChange={(id) =>
                 setForm((f) => ({
                   ...f,
-                  customStreams: f.customStreams.map((r, i) => (i === idx ? { ...r, userAgent: e.target.value } : r)),
+                  customStreams: f.customStreams.map((r, i) => (i === idx ? { ...r, channelId: id } : r)),
                 }))
               }
-              placeholder="User-Agent (optional)"
             />
-            <NeonInput
-              value={row.referer}
-              onChange={(e) =>
-                setForm((f) => ({
-                  ...f,
-                  customStreams: f.customStreams.map((r, i) => (i === idx ? { ...r, referer: e.target.value } : r)),
-                }))
-              }
-              placeholder="Referer (optional)"
-            />
-          </div>
+          ) : (
+            <>
+              <NeonInput
+                value={row.url}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    customStreams: f.customStreams.map((r, i) => (i === idx ? { ...r, url: e.target.value } : r)),
+                  }))
+                }
+                placeholder="Stream URL (https://…/stream.m3u8)"
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <NeonInput
+                  value={row.userAgent}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      customStreams: f.customStreams.map((r, i) => (i === idx ? { ...r, userAgent: e.target.value } : r)),
+                    }))
+                  }
+                  placeholder="User-Agent (optional)"
+                />
+                <NeonInput
+                  value={row.referer}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      customStreams: f.customStreams.map((r, i) => (i === idx ? { ...r, referer: e.target.value } : r)),
+                    }))
+                  }
+                  placeholder="Referer (optional)"
+                />
+              </div>
+            </>
+          )}
         </div>
-      ))}
+        );
+      })}
       <button
         type="button"
         onClick={() => setForm((f) => ({ ...f, customStreams: [...f.customStreams, emptyStreamRow()] }))}
@@ -1268,14 +1424,7 @@ const EventStreamsModal: React.FC<{
   onClose: () => void;
   onToast: (msg: string, error?: boolean) => void;
 }> = ({ event, channels, onClose, onToast }) => {
-  const [rows, setRows] = useState<StreamRow[]>(() =>
-    (event.customStreams ?? []).map((s) => ({
-      title: s.title ?? '',
-      url: s.url,
-      userAgent: s.userAgent ?? '',
-      referer: s.referer ?? '',
-    })),
-  );
+  const [rows, setRows] = useState<StreamRow[]>(() => toStreamRows(event.customStreams));
   const [busy, setBusy] = useState(false);
 
   const setRow = (idx: number, patch: Partial<StreamRow>) =>
@@ -1286,15 +1435,18 @@ const EventStreamsModal: React.FC<{
     try {
       await updateEvent(event.id, {
         customStreams: rows
-          .filter((r) => r.url.trim())
+          .filter((r) => r.channelId.trim() || r.url.trim())
           .map((r) => ({
-            url: r.url.trim(),
+            url: r.channelId.trim() ? '' : r.url.trim(),
+            channelId: r.channelId.trim() || undefined,
             title: r.title.trim() || undefined,
-            userAgent: r.userAgent.trim() || undefined,
-            referer: r.referer.trim() || undefined,
+            userAgent: r.channelId.trim() ? undefined : r.userAgent.trim() || undefined,
+            referer: r.channelId.trim() ? undefined : r.referer.trim() || undefined,
           })),
       });
-      onToast(`Streams saved — ${rows.filter((r) => r.url.trim()).length} extra stream(s) attached`);
+      onToast(
+        `Streams saved — ${rows.filter((r) => r.channelId.trim() || r.url.trim()).length} extra stream(s) attached`,
+      );
       onClose();
     } catch (err) {
       onToast((err as Error).message, true);
@@ -1335,54 +1487,98 @@ const EventStreamsModal: React.FC<{
               • <strong>{c!.name}</strong> (channel) — {c!.url}
             </p>
           ))}
+          {rows.filter((r) => r.channelId.trim()).map((r, i) => {
+            const ch = channels.find((c) => c.id === r.channelId.trim());
+            return (
+              <p key={`row-ch-${i}`} className="text-[10.5px] text-slate-500 truncate">
+                • <strong>{r.title.trim() || ch?.name || 'Channel'}</strong> (stream slot) — {ch?.url ?? 'channel missing'}
+              </p>
+            );
+          })}
         </div>
 
         {/* Extra streams editor */}
         <div className="space-y-2">
           {rows.length === 0 && (
             <p className="text-[10.5px] text-slate-500">
-              No extra streams yet — add any stream URL (e.g. a backup M3U8) to appear in the
-              switcher next to the primary.
+              No extra streams yet — each slot below becomes one position in the player's switcher
+              (Stream 1, Stream 2, …). A slot can be an existing channel or any stream URL.
             </p>
           )}
-          {rows.map((row, idx) => (
-            <div key={idx} className="rounded-xl border border-white/70 bg-white/60 p-2.5 space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="neon-badge shrink-0">Stream {idx + 1}</span>
-                <NeonInput
-                  value={row.title}
-                  onChange={(e) => setRow(idx, { title: e.target.value })}
-                  placeholder="Label shown in the switcher (optional)"
-                  className="flex-1"
-                />
-                <button
-                  type="button"
-                  onClick={() => setRows((prev) => prev.filter((_, i) => i !== idx))}
-                  className="neon-btn-ghost neon-btn-danger px-2 py-1"
-                  aria-label="Remove stream"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+          {rows.map((row, idx) => {
+            const channelMode = Boolean(row.channelId.trim());
+            return (
+              <div key={idx} className="rounded-xl border border-white/70 bg-white/60 p-2.5 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="neon-badge shrink-0">Stream {idx + 1}</span>
+                  {/* Source mode: existing channel or custom URL */}
+                  <div className="neu-inset-sm flex items-center rounded-full p-0.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setRow(idx, { channelId: '' })}
+                      aria-pressed={!channelMode}
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-display font-bold transition-colors cursor-pointer ${
+                        !channelMode ? 'bg-[#1D6BFF] text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      Custom URL
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRow(idx, { channelId: ' ' })}
+                      aria-pressed={channelMode}
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-display font-bold transition-colors cursor-pointer ${
+                        channelMode ? 'bg-[#1D6BFF] text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      Existing channel
+                    </button>
+                  </div>
+                  <NeonInput
+                    value={row.title}
+                    onChange={(e) => setRow(idx, { title: e.target.value })}
+                    placeholder="Label shown in the switcher (optional)"
+                    className="flex-1 min-w-[140px]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setRows((prev) => prev.filter((_, i) => i !== idx))}
+                    className="neon-btn-ghost neon-btn-danger px-2 py-1 shrink-0"
+                    aria-label="Remove stream"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {channelMode ? (
+                  <ChannelSearchPicker
+                    channels={channels}
+                    value={row.channelId.trim()}
+                    onChange={(id) => setRow(idx, { channelId: id })}
+                  />
+                ) : (
+                  <>
+                    <NeonInput
+                      value={row.url}
+                      onChange={(e) => setRow(idx, { url: e.target.value })}
+                      placeholder="Stream URL (https://…/stream.m3u8)"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <NeonInput
+                        value={row.userAgent}
+                        onChange={(e) => setRow(idx, { userAgent: e.target.value })}
+                        placeholder="User-Agent (optional)"
+                      />
+                      <NeonInput
+                        value={row.referer}
+                        onChange={(e) => setRow(idx, { referer: e.target.value })}
+                        placeholder="Referer (optional)"
+                      />
+                    </div>
+                  </>
+                )}
               </div>
-              <NeonInput
-                value={row.url}
-                onChange={(e) => setRow(idx, { url: e.target.value })}
-                placeholder="Stream URL (https://…/stream.m3u8)"
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <NeonInput
-                  value={row.userAgent}
-                  onChange={(e) => setRow(idx, { userAgent: e.target.value })}
-                  placeholder="User-Agent (optional)"
-                />
-                <NeonInput
-                  value={row.referer}
-                  onChange={(e) => setRow(idx, { referer: e.target.value })}
-                  placeholder="Referer (optional)"
-                />
-              </div>
-            </div>
-          ))}
+            );
+          })}
           <button
             type="button"
             onClick={() => setRows((prev) => [...prev, emptyStreamRow()])}

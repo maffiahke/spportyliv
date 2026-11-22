@@ -43,6 +43,23 @@ function headersFromMatchStream(s: MatchStream, eventHeaders?: StreamHeaders): S
   return out;
 }
 
+/**
+ * One stream slot: a custom URL, or an existing IPTV channel (auto-sync
+ * aware — the channel's current URL/headers are used at playback time).
+ */
+function streamSlotSource(
+  s: MatchStream,
+  channels: IptvChannel[] | undefined,
+): { url: string; label: string; headers: StreamHeaders; channelId?: string } | null {
+  if (s.channelId) {
+    const ch = channels?.find((c) => c.id === s.channelId);
+    if (!ch) return null;
+    return { url: ch.url, label: s.title || ch.name, headers: ch.headers ?? {}, channelId: ch.id };
+  }
+  if (!s.url) return null;
+  return { url: s.url, label: s.title || '', headers: headersFromMatchStream(s) };
+}
+
 const VIEWERS_MIN = 120;
 const VIEWERS_MAX = 5000;
 
@@ -142,7 +159,12 @@ export function adminEventToLiveMatch(
     if (ch) pushSource(ch.url, ch.name, ch.headers, `ch-${ch.id}`);
   }
   for (const [i, s] of (ev.customStreams ?? []).entries()) {
-    pushSource(s.url, s.title || `Stream ${i + 1}`, headersFromMatchStream(s, ev.headers), `cs-${i}`, s.quality);
+    const slot = streamSlotSource(s, channels);
+    if (!slot) continue;
+    const label = slot.channelId
+      ? slot.label
+      : s.title || `Stream ${i + 1}`;
+    pushSource(slot.url, label, slot.headers, `cs-${i}`, s.quality);
   }
   // The event's own stream URL is always a source — it is the main stream
   // (usually the primary from the feed). Dedupe keeps channel-seeded URLs
@@ -316,9 +338,16 @@ export function adminUpcomingToLiveMatch(
     const ch = channels?.find((c) => c.id === cid);
     if (ch) pushSource(ch.url, ch.name, ch.headers, `ch-${ch.id}`);
   });
-  (ev.customStreams ?? []).forEach((s, i) =>
-    pushSource(s.url, s.title || `Stream ${i + 1}`, headersFromMatchStream(s, ev.headers), `cs-${i}`),
-  );
+  (ev.customStreams ?? []).forEach((s, i) => {
+    const slot = streamSlotSource(s, channels);
+    if (!slot) return;
+    pushSource(
+      slot.url,
+      slot.channelId ? slot.label : s.title || `Stream ${i + 1}`,
+      slot.headers,
+      `cs-${i}`,
+    );
+  });
   pushSource(ev.streamUrl ?? '', 'Primary stream', ev.headers, 'primary');
   const streamUrl = streams[0]?.url;
   return {

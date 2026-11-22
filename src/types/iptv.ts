@@ -129,6 +129,8 @@ export interface MatchStream {
   url: string;
   userAgent?: string;
   referer?: string;
+  /** When set, this slot plays an existing IPTV channel instead of `url`. */
+  channelId?: string;
 }
 
 /** Admin-managed hero banner slide. */

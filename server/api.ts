@@ -121,14 +121,17 @@ async function fetchPlaylistText(sourceUrl: string): Promise<string> {
  * - URLs that disappeared from the playlist (dead/gone) are removed.
  */
 /** Normalise admin-provided extra streams; null when the field is absent. */
-function parseCustomStreams(raw: unknown): Array<{ url: string; title?: string; userAgent?: string; referer?: string }> | null {
+function parseCustomStreams(raw: unknown): Array<{ url: string; title?: string; userAgent?: string; referer?: string; channelId?: string }> | null {
   if (!Array.isArray(raw)) return null;
-  const streams: Array<{ url: string; title?: string; userAgent?: string; referer?: string }> = [];
+  const streams: Array<{ url: string; title?: string; userAgent?: string; referer?: string; channelId?: string }> = [];
   for (const item of raw as unknown[]) {
     const s = (item ?? {}) as Record<string, unknown>;
     const url = typeof s.url === 'string' ? s.url.trim() : '';
-    if (!url) continue;
-    const out: { url: string; title?: string; userAgent?: string; referer?: string } = { url };
+    const channelId = typeof s.channelId === 'string' ? s.channelId.trim() : '';
+    // A row is either an existing channel or a custom URL.
+    if (!url && !channelId) continue;
+    const out: { url: string; title?: string; userAgent?: string; referer?: string; channelId?: string } = { url };
+    if (channelId) out.channelId = channelId;
     if (typeof s.title === 'string' && s.title.trim()) out.title = s.title.trim();
     if (typeof s.userAgent === 'string' && s.userAgent.trim()) out.userAgent = s.userAgent.trim();
     if (typeof s.referer === 'string' && s.referer.trim()) out.referer = s.referer.trim();
