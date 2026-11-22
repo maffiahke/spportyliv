@@ -71,30 +71,17 @@ export default function App() {
   const [selectedSport, setSelectedSport] = useState<SportCategoryId>('all');
   const [showAllLive, setShowAllLive] = useState(false);
   const [showAllScheduled, setShowAllScheduled] = useState(false);
-  const [showAllRecentChannels, setShowAllRecentChannels] = useState(false);
+  const [showAllPopularChannels, setShowAllPopularChannels] = useState(false);
   const [moreSportsOpen, setMoreSportsOpen] = useState(false);
 
-  // Recently watched TV channels (this device): ids in localStorage, most
-  // recent first, capped — so Home can surface a "Recent Channels" shelf.
-  const [recentChannelIds, setRecentChannelIds] = useState<string[]>(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem('sl_recent_channels') ?? '[]');
-      return Array.isArray(raw) ? raw.filter((x) => typeof x === 'string').slice(0, 10) : [];
-    } catch {
-      return [];
+  /** Fisher–Yates shuffle — a fresh order on every call. */
+  const shuffle = <T,>(list: T[]): T[] => {
+    const out = [...list];
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
     }
-  });
-
-  const rememberRecentChannel = (channelId: string) => {
-    setRecentChannelIds((prev) => {
-      const next = [channelId, ...prev.filter((id) => id !== channelId)].slice(0, 10);
-      try {
-        localStorage.setItem('sl_recent_channels', JSON.stringify(next));
-      } catch {
-        /* storage unavailable — in-memory only */
-      }
-      return next;
-    });
+    return out;
   };
 
   // Interactive Search & Notifications
@@ -119,15 +106,13 @@ export default function App() {
   // Server-driven IPTV content (playlists → channels, events, banners).
   const [content, setContent] = useState(FALLBACK_CONTENT);
 
-  // Ids may outlive their channel (probes delete dead ones) — keep only the
-  // ids that still resolve to a real channel.
-  const recentChannels = useMemo(
-    () =>
-      recentChannelIds
-        .map((id) => content.tvChannels.find((c) => c.id === id))
-        .filter((c): c is TVChannel => Boolean(c)),
-    [recentChannelIds, content.tvChannels],
+  // Popular Channels on Home: a random pick across all live TV channels,
+  // reshuffled whenever content refreshes (and on every app load).
+  const popularChannels = useMemo(
+    () => shuffle(content.tvChannels),
+    [content.tvChannels],
   );
+
   const rawDataRef = useRef<AppData | null>(null);
   const reloadContent = useCallback(async () => {
     try {
@@ -355,7 +340,6 @@ export default function App() {
       setToastMessage('Nothing to play yet');
       return;
     }
-    if (channel) rememberRecentChannel(channel.id);
     setPlayerIsPlaying(true);
     setActiveStream({ match: effectiveMatch, channel: channel ?? null, isPip: false });
     // Start loading the stream before the player screen finishes mounting:
@@ -1018,14 +1002,18 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Recent Channels — the last section on Home; only channels this
-                    device tuned into before; hides entirely until the first watch */}
-                {recentChannels.length > 0 && (
+                {/* Popular Channels — the last section on Home; a random
+                    pick across all live TV channels, reshuffled on refresh */}
+                {popularChannels.length > 0 && (
                   <ChannelShelf
-                    title="Recent Channels"
-                    channels={showAllRecentChannels ? recentChannels : recentChannels.slice(0, 6)}
-                    expanded={showAllRecentChannels}
-                    onToggleExpand={() => setShowAllRecentChannels((v) => !v)}
+                    title="Popular Channels"
+                    channels={
+                      showAllPopularChannels
+                        ? popularChannels.slice(0, 18)
+                        : popularChannels.slice(0, 6)
+                    }
+                    expanded={showAllPopularChannels}
+                    onToggleExpand={() => setShowAllPopularChannels((v) => !v)}
                     onSelectChannel={(channel) =>
                       openPlayerScreen(
                         content.liveMatches.find((m) => m.id === channel.linkedMatchId),
