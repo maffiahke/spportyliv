@@ -587,7 +587,11 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
           <PictureInPicture2 className="w-4 h-4" />
         </button>
 
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EF4444] px-2.5 py-1 text-[10.5px] font-display font-extrabold text-white shrink-0">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EF4444] px-2.5 py-1 text-[10.5px] font-display font-extrabold text-white shrink-0 animate-live-glow-sm">
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="absolute inline-flex h-full w-full rounded-full bg-white opacity-80 animate-ping" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" />
+          </span>
           LIVE
         </span>
       </div>
@@ -869,7 +873,11 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
                 {channel.currentShow}
               </p>
             </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EF4444] px-2.5 py-1 text-[10.5px] font-display font-extrabold text-white shrink-0">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EF4444] px-2.5 py-1 text-[10.5px] font-display font-extrabold text-white shrink-0 animate-live-glow-sm">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-white opacity-80 animate-ping" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" />
+              </span>
               LIVE
             </span>
           </div>

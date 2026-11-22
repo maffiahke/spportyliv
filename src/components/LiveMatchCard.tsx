@@ -216,10 +216,20 @@ export const LiveMatchCard: React.FC<LiveMatchCardProps> = ({
           <div className="flex items-center gap-2 min-w-0">
             <span
               className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-display font-extrabold tracking-wide text-white shadow-sm ${
-                isUpcoming ? 'bg-[#1D6BFF]' : 'bg-[#EF4444]'
+                isUpcoming ? 'bg-[#1D6BFF]' : 'bg-[#EF4444] animate-live-glow-sm'
               }`}
             >
-              {isUpcoming ? 'UPCOMING' : 'LIVE'}
+              {isUpcoming ? (
+                'UPCOMING'
+              ) : (
+                <>
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-white opacity-80 animate-ping" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" />
+                  </span>
+                  LIVE
+                </>
+              )}
             </span>
             {isUpcoming ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-950/60 backdrop-blur-sm px-2.5 py-0.5 text-[11px] font-semibold text-white tabular-nums whitespace-nowrap" title={match.kickoffLabel}>
@@ -416,7 +426,7 @@ export const LiveMatchCard: React.FC<LiveMatchCardProps> = ({
           className={`shrink-0 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r active:scale-[0.98] transition-all px-4 py-2 min-h-[38px] sm:min-h-[40px] text-white font-display font-bold text-xs sm:text-[13px] cursor-pointer whitespace-nowrap ${
             isUpcoming
               ? 'from-[#1D6BFF] to-[#1E40AF] hover:from-[#1557D6] hover:to-[#1E3A8A] shadow-[4px_4px_12px_rgba(29,107,255,0.35),-2px_-2px_8px_rgba(255,255,255,0.7)]'
-              : 'from-[#EF4444] to-[#DC2626] hover:from-[#DC2626] hover:to-[#B91C1C] shadow-[4px_4px_12px_rgba(239,68,68,0.35),-2px_-2px_8px_rgba(255,255,255,0.7)]'
+              : 'from-[#EF4444] to-[#DC2626] hover:from-[#DC2626] hover:to-[#B91C1C] animate-live-glow'
           }`}
         >
           {isUpcoming ? (
