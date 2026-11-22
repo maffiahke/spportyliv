@@ -61,6 +61,16 @@ const formatMediaTime = (seconds: number): string => {
   return `${m}:${String(s).padStart(2, '0')}`;
 };
 
+/** Fisher–Yates shuffle — a fresh order on every call. */
+const shuffle = <T,>(list: T[]): T[] => {
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+};
+
 export const PlayerScreen: React.FC<PlayerScreenProps> = ({
   match,
   channel,
@@ -423,13 +433,16 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
     }
   }, [isPlaying, videoUrl]);
 
+  // Similar & Related: randomised on every open — a shuffled pick from the
+  // same-sport pool first, then other sports, so the shelf feels fresh each
+  // time instead of always showing the same first entries.
   const relatedItems = useMemo<RelatedItem[]>(() => {
     if (channel) {
-      const sameSportChannels = channels.filter(
-        (c) => c.id !== channel.id && c.sport === currentSport
+      const sameSportChannels = shuffle(
+        channels.filter((c) => c.id !== channel.id && c.sport === currentSport),
       );
-      const otherChannels = channels.filter(
-        (c) => c.id !== channel.id && c.sport !== currentSport
+      const otherChannels = shuffle(
+        channels.filter((c) => c.id !== channel.id && c.sport !== currentSport),
       );
       const pickedChannels = [...sameSportChannels, ...otherChannels].slice(0, 4);
 
@@ -440,16 +453,18 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
           liveMatches.find((m) => m.id === c.linkedMatchId) || liveMatches[0],
       }));
 
-      const relatedMatches: RelatedItem[] = liveMatches
-        .filter((m) => m.id !== match.id)
+      const relatedMatches: RelatedItem[] = shuffle(
+        liveMatches.filter((m) => m.id !== match.id),
+      )
         .slice(0, 2)
         .map((m) => ({ kind: 'match', match: m }));
 
       return [...channelItems, ...relatedMatches];
     }
 
-    const sameSportChannels = channels
-      .filter((c) => c.sport === currentSport)
+    const sameSportChannels = shuffle(
+      channels.filter((c) => c.sport === currentSport),
+    )
       .slice(0, 2)
       .map((c) => ({
         kind: 'channel' as const,
@@ -458,13 +473,7 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
           liveMatches.find((m) => m.id === c.linkedMatchId) || match,
       }));
 
-    const otherMatches = liveMatches
-      .filter((m) => m.id !== match.id)
-      .sort((a, b) => {
-        const aSame = a.sport === currentSport ? 0 : 1;
-        const bSame = b.sport === currentSport ? 0 : 1;
-        return aSame - bSame;
-      })
+    const otherMatches = shuffle(liveMatches.filter((m) => m.id !== match.id))
       .map((m) => ({ kind: 'match' as const, match: m }));
 
     return [...sameSportChannels, ...otherMatches].slice(0, 6);
