@@ -202,7 +202,7 @@ export const LiveTVView: React.FC<LiveTVViewProps> = ({
   );
 };
 
-interface ChannelShelfProps {
+export interface ChannelShelfProps {
   title: string;
   channels: TVChannel[];
   rows?: 1 | 2;
@@ -211,7 +211,7 @@ interface ChannelShelfProps {
   onSelectChannel: (channel: TVChannel) => void;
 }
 
-const ChannelShelf: React.FC<ChannelShelfProps> = ({
+export const ChannelShelf: React.FC<ChannelShelfProps> = ({
   title,
   channels,
   rows = 1,

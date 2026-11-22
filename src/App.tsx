@@ -41,7 +41,7 @@ import { LiveMatchCard } from './components/LiveMatchCard';
 import { UpcomingEventCard } from './components/UpcomingEventCard';
 import { PlayerScreen } from './components/PlayerScreen';
 import { PipPlayer } from './components/PipPlayer';
-import { LiveTVView } from './components/LiveTVView';
+import { LiveTVView, ChannelShelf } from './components/LiveTVView';
 import { AdSlot } from './components/ads/AdSlot';
 import { AdBudgetProvider } from './components/ads/AdBudget';
 import { AdsConsentBanner } from './components/ads/AdsConsentBanner';
@@ -70,7 +70,31 @@ export default function App() {
   const [selectedSport, setSelectedSport] = useState<SportCategoryId>('all');
   const [showAllLive, setShowAllLive] = useState(false);
   const [showAllScheduled, setShowAllScheduled] = useState(false);
+  const [showAllRecentChannels, setShowAllRecentChannels] = useState(false);
   const [moreSportsOpen, setMoreSportsOpen] = useState(false);
+
+  // Recently watched TV channels (this device): ids in localStorage, most
+  // recent first, capped — so Home can surface a "Recent Channels" shelf.
+  const [recentChannelIds, setRecentChannelIds] = useState<string[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('sl_recent_channels') ?? '[]');
+      return Array.isArray(raw) ? raw.filter((x) => typeof x === 'string').slice(0, 10) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const rememberRecentChannel = (channelId: string) => {
+    setRecentChannelIds((prev) => {
+      const next = [channelId, ...prev.filter((id) => id !== channelId)].slice(0, 10);
+      try {
+        localStorage.setItem('sl_recent_channels', JSON.stringify(next));
+      } catch {
+        /* storage unavailable — in-memory only */
+      }
+      return next;
+    });
+  };
 
   // Interactive Search & Notifications
   const [searchOpen, setSearchOpen] = useState(false);
@@ -93,6 +117,16 @@ export default function App() {
 
   // Server-driven IPTV content (playlists → channels, events, banners).
   const [content, setContent] = useState(FALLBACK_CONTENT);
+
+  // Ids may outlive their channel (probes delete dead ones) — keep only the
+  // ids that still resolve to a real channel.
+  const recentChannels = useMemo(
+    () =>
+      recentChannelIds
+        .map((id) => content.tvChannels.find((c) => c.id === id))
+        .filter((c): c is TVChannel => Boolean(c)),
+    [recentChannelIds, content.tvChannels],
+  );
   const rawDataRef = useRef<AppData | null>(null);
   const reloadContent = useCallback(async () => {
     try {
@@ -320,6 +354,7 @@ export default function App() {
       setToastMessage('Nothing to play yet');
       return;
     }
+    if (channel) rememberRecentChannel(channel.id);
     setPlayerIsPlaying(true);
     setActiveStream({ match: effectiveMatch, channel: channel ?? null, isPip: false });
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -819,6 +854,23 @@ export default function App() {
 
                 {/* Home top unit: below the hero + sport row, above Live Now */}
                 <AdSlot placement="home-top" ads={ads} />
+
+                {/* Recent Channels — one column; only channels this device tuned
+                    into before; hides entirely until the first watch */}
+                {recentChannels.length > 0 && (
+                  <ChannelShelf
+                    title="Recent Channels"
+                    channels={showAllRecentChannels ? recentChannels : recentChannels.slice(0, 6)}
+                    expanded={showAllRecentChannels}
+                    onToggleExpand={() => setShowAllRecentChannels((v) => !v)}
+                    onSelectChannel={(channel) =>
+                      openPlayerScreen(
+                        content.liveMatches.find((m) => m.id === channel.linkedMatchId),
+                        channel,
+                      )
+                    }
+                  />
+                )}
 
                 {/* Live Now + Upcoming Events */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-start">
