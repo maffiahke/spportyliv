@@ -320,6 +320,46 @@ export async function runAutoSync(): Promise<{ tested: number; alive: number; de
   return health;
 }
 
+const AUTO_SYNC_STALE_MS = 10 * 60 * 1000;
+let staleSyncRunning = false;
+
+/**
+ * Self-healing sync for serverless: Vercel Hobby clamps cron jobs to once a
+ * day, so the public data feed can go stale. Every /api/data request checks
+ * whether an autoSync playlist is older than the stale window and refreshes
+ * it inline (playlist diff only — the 40s health pass stays cron-only).
+ */
+export async function syncStalePlaylists(): Promise<void> {
+  if (staleSyncRunning) return;
+  staleSyncRunning = true;
+  try {
+    await ensureStoreReady();
+    const store = loadStore();
+    const now = Date.now();
+    const due = (store.playlists as IptvPlaylist[]).filter(
+      (p) =>
+        p.autoSync &&
+        p.enabled !== false &&
+        (!p.lastSyncedAt || now - new Date(p.lastSyncedAt).getTime() > AUTO_SYNC_STALE_MS),
+    );
+    await Promise.all(
+      due.map(async (p) => {
+        try {
+          const stats = await syncPlaylistChannels(p, { testChannels: false });
+          console.log(`[auto-sync] ${p.name}: +${stats.added} added, ${stats.removed} removed`);
+          notifySyncChanges(p.name, stats.added, stats.removed);
+        } catch (err) {
+          p.lastError = (err as Error).message;
+          await saveStore();
+          console.error(`[auto-sync] ${p.name} failed:`, (err as Error).message);
+        }
+      }),
+    );
+  } finally {
+    staleSyncRunning = false;
+  }
+}
+
 export interface ImportResult {
   playlist: IptvPlaylist;
   channelCount: number;
@@ -1120,6 +1160,14 @@ export async function handleApiRequest(
 
   // ---------------- Public: app data ----------------
   if (method === 'GET' && path === '/api/data') {
+    // Self-healing sync: if the cron hasn't run within the stale window
+    // (Hobby clamps crons to daily), refresh due playlists inline so the
+    // public feed never goes stale. Cheap no-op when everything is fresh.
+    try {
+      await syncStalePlaylists();
+    } catch (err) {
+      console.error('[auto-sync] stale check failed:', (err as Error).message);
+    }
     // Channels belonging to a disabled playlist are hidden from the site.
     sendJson(res, 200, getAppData());
     return true;

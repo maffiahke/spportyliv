@@ -78,9 +78,12 @@ lambda instance can validate it without shared memory.
 
 ## Cron
 
-`vercel.json` schedules `/api/cron/playlist-sync` once a day (`0 0 * * *`),
-which is what Vercel Hobby allows. On Pro, switch the schedule to `*/5 * * * *`
-for 5-minute auto-sync. The route is idempotent and safe to call manually:
+`vercel.json` schedules `/api/cron/playlist-sync` every 10 minutes
+(`*/10 * * * *`). Vercel Hobby clamps cron jobs to once a day (00:00 UTC), so
+in addition every `/api/data` request self-heals: when an autoSync playlist
+hasn't synced within 10 minutes it is refreshed inline (playlist diff only —
+the 40s channel-health pass stays cron-only). The route is idempotent and
+safe to call manually:
 
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" https://your-app.vercel.app/api/cron/playlist-sync
