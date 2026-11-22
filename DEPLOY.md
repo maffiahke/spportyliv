@@ -80,13 +80,29 @@ lambda instance can validate it without shared memory.
 
 `vercel.json` schedules `/api/cron/playlist-sync` once a day (`0 0 * * *`),
 which is the maximum Vercel Hobby allows (more frequent schedules fail the
-deployment). Freshness is covered by the self-healing sync instead: every
-`/api/data` request refreshes an autoSync playlist whose `lastSyncedAt` is
-older than 10 minutes (playlist diff only — the 40s channel-health pass stays
-on the daily cron). The route is idempotent and safe to call manually:
+deployment). In addition, every `/api/data` request self-heals: when an
+autoSync playlist hasn't synced within 10 minutes it is refreshed inline
+(playlist diff only — the 40s channel-health pass stays cron-only).
+
+### cron-job.org (recommended)
+
+Run the sync every 10 minutes with a free [cron-job.org](https://cron-job.org)
+job:
+
+1. Create an account at cron-job.org → **Cronjobs → Create cronjob**
+2. **URL**: `https://<your-app>.vercel.app/api/cron/playlist-sync?quick=1`
+   (`quick=1` skips the 40s health pass so the request returns in a few
+   seconds; dead-channel pruning still runs on the daily cron)
+3. **Schedule**: every 10 minutes
+4. **Advanced → Headers**: if `CRON_SECRET` is set in the Vercel env, add
+   `Authorization: Bearer <CRON_SECRET>` — otherwise the route is open
+5. Save and enable
+
+The route is idempotent and safe to call manually:
 
 ```bash
-curl -H "Authorization: Bearer $CRON_SECRET" https://your-app.vercel.app/api/cron/playlist-sync
+curl -H "Authorization: Bearer $CRON_SECRET" \
+  "https://your-app.vercel.app/api/cron/playlist-sync?quick=1"
 ```
 
 ## AdSense

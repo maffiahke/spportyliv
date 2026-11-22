@@ -295,7 +295,9 @@ export function startAutoSync(intervalMs = 10 * 60 * 1000): void {
   console.log(`[auto-sync] scheduler running every ${Math.round(intervalMs / 60000)} min`);
 }
 
-export async function runAutoSync(): Promise<{ tested: number; alive: number; dead: number; deleted: number }> {
+export async function runAutoSync(
+  opts: { health?: boolean } = {},
+): Promise<{ tested: number; alive: number; dead: number; deleted: number }> {
   // The store may still be loading on a cold start; the next tick picks it up.
   await ensureStoreReady();
   const store = loadStore();
@@ -315,7 +317,10 @@ export async function runAutoSync(): Promise<{ tested: number; alive: number; de
       }
     }),
   );
-  // One full health pass for all channels after the sync batch, not per playlist.
+  // One full health pass for all channels after the sync batch, not per
+  // playlist. Quick mode (external cron with short timeouts) skips it — the
+  // daily cron or an admin action still covers dead-channel pruning.
+  if (opts.health === false) return { tested: 0, alive: 0, dead: 0, deleted: 0 };
   const health = await testAllChannels();
   return health;
 }
@@ -1225,9 +1230,14 @@ export async function handleApiRequest(
       return true;
     }
     const startedAt = Date.now();
-    const health = await runAutoSync();
+    // Quick mode (`?quick=1`) skips the 40s channel-health pass so external
+    // schedulers with short timeouts (cron-job.org, Upstash) never see a
+    // timeout; the daily Vercel cron runs the full pass instead.
+    const quick = url.searchParams.get('quick') === '1';
+    const health = await runAutoSync({ health: !quick });
     sendJson(res, 200, {
       ok: true,
+      mode: quick ? 'quick' : 'full',
       backend: storeBackend(),
       ms: Date.now() - startedAt,
       playlists: loadStore().playlists.filter((p) => p.autoSync && p.enabled !== false).length,
