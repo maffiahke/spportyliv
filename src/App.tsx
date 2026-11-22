@@ -519,13 +519,19 @@ export default function App() {
                 type="button"
                 onClick={() => handleSwitchTab(id)}
                 title={hint}
-                className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-left transition-all cursor-pointer ${
+                className={`relative flex items-center gap-3 px-4 py-3 rounded-2xl text-left transition-all cursor-pointer ${
                   active
                     ? 'neu-inset-sm text-[#1D6BFF]'
                     : 'text-slate-600 hover:text-slate-950 hover:bg-white/60'
                 }`}
               >
                 <Icon className={`w-5 h-5 shrink-0 ${active ? 'fill-[#1D6BFF]/15 stroke-[2.2]' : 'stroke-[1.8]'}`} />
+                {id === 'live-tv' && content.liveMatches.length > 0 && (
+                  <span className="absolute top-3 right-3 flex h-2.5 w-2.5" aria-label="Live now">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-[#EF4444] opacity-75 animate-ping" />
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#EF4444]" />
+                  </span>
+                )}
                 <span className="font-display font-bold text-sm">{label}</span>
               </button>
             );
@@ -1080,15 +1086,26 @@ export default function App() {
               key={id}
               type="button"
               onClick={() => handleSwitchTab(id)}
-              className={`flex flex-col items-center justify-center py-1.5 rounded-2xl min-h-[44px] transition-all cursor-pointer ${
+              className={`relative flex flex-col items-center justify-center py-1.5 rounded-2xl min-h-[44px] transition-all cursor-pointer ${
                 active
                   ? 'neu-inset-sm text-[#1D6BFF]'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Icon
-                className={`w-[18px] h-[18px] ${active ? 'fill-[#1D6BFF]/15 stroke-[2.3]' : 'stroke-[1.9]'}`}
-              />
+              <span className="relative">
+                <Icon
+                  className={`w-[18px] h-[18px] ${active ? 'fill-[#1D6BFF]/15 stroke-[2.3]' : 'stroke-[1.9]'}`}
+                />
+                {id === 'live-tv' && content.liveMatches.length > 0 && (
+                  <span
+                    className="absolute -top-1 -right-1.5 flex h-2 w-2"
+                    aria-label="Live now"
+                  >
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-[#EF4444] opacity-75 animate-ping" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-[#EF4444]" />
+                  </span>
+                )}
+              </span>
               <span className="mt-0.5 font-display font-bold text-[10.5px] leading-tight">
                 {label}
               </span>
