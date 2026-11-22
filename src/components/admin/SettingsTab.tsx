@@ -24,6 +24,7 @@ import {
 import {
   DEFAULT_ADS_SETTINGS,
   SiteSettings,
+  type AdNetworkKind,
   type AdPlacementId,
   type AdsSettings,
 } from '../../types/iptv';
@@ -114,6 +115,26 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ settings, onSaved, onT
       };
     });
 
+  const patchAltSlot = (id: AdPlacementId, patch: Partial<{ enabled: boolean; code: string }>) =>
+    setDraft((prev) => {
+      const base = prev.ads ?? DEFAULT_ADS_SETTINGS;
+      const current = base.altSlots?.[id] ?? { enabled: false, code: '' };
+      return {
+        ...prev,
+        ads: { ...base, altSlots: { ...base.altSlots, [id]: { ...current, ...patch } } },
+      };
+    });
+
+  const patchPageScript = (kind: AdNetworkKind, patch: Partial<{ enabled: boolean; url: string }>) =>
+    setDraft((prev) => {
+      const base = prev.ads ?? DEFAULT_ADS_SETTINGS;
+      const current = base.pageScripts?.[kind] ?? { enabled: false, url: '' };
+      return {
+        ...prev,
+        ads: { ...base, pageScripts: { ...base.pageScripts, [kind]: { ...current, ...patch } } },
+      };
+    });
+
   const contactRows = [
     { icon: Mail, value: draft.supportEmail, href: `mailto:${draft.supportEmail}` },
     { icon: Phone, value: draft.supportPhone, href: `tel:${draft.supportPhone}` },
@@ -173,21 +194,21 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ settings, onSaved, onT
 
           <Section
             icon={Megaphone}
-            title="Monetization (AdSense)"
+            title="Monetization (AdSense + networks)"
             hint="Placements update live on the public site — no redeploy"
             cols="grid-cols-1"
           >
             <div className="flex items-center justify-between gap-3 rounded-xl bg-white/70 px-3 py-2.5">
               <div className="min-w-0">
-                <p className="font-display font-bold text-[11px] text-slate-950">Enable AdSense</p>
+                <p className="font-display font-bold text-[11px] text-slate-950">Enable monetization</p>
                 <p className="text-[10px] text-slate-500">
-                  Master switch. When off, the Google script is never loaded.
+                  Master switch. When off, no ad network (AdSense, Monetag, Adsterra) loads at all.
                 </p>
               </div>
               <NeonToggle
                 on={adsDraft.enabled}
                 onChange={(next) => patchAds({ enabled: next })}
-                label="Enable AdSense"
+                label="Enable monetization"
               />
             </div>
 
@@ -222,6 +243,47 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ settings, onSaved, onT
               (or <code className="font-semibold">VITE_ADSENSE_CLIENT</code>) automatically.
             </p>
 
+            {/* Alternative networks — site-wide scripts */}
+            <div className="rounded-xl border border-[#1D6BFF]/25 bg-[#1D6BFF]/5 px-3 py-2.5 space-y-2">
+              <p className="font-display font-extrabold text-[11px] text-slate-950">
+                Alternative networks — site-wide
+              </p>
+              <p className="text-[10px] leading-relaxed text-slate-500">
+                Paste the script src from the network dashboard. These run across the whole site
+                (Monetag MultiTag, Adsterra Social Bar) and place their own formats.
+              </p>
+              {([
+                ['monetag', 'Monetag', 'MultiTag script src, e.g. https://…/tag.min.js'],
+                ['adsterra', 'Adsterra', 'Social Bar script src, e.g. //…/invite.js'],
+              ] as [AdNetworkKind, string, string][]).map(([kind, label, hint]) => {
+                const script = adsDraft.pageScripts?.[kind] ?? { enabled: false, url: '' };
+                return (
+                  <div key={kind} className="flex flex-wrap items-center gap-2.5 rounded-xl bg-white/70 px-3 py-2.5">
+                    <NeonToggle
+                      on={script.enabled}
+                      onChange={(next) => patchPageScript(kind, { enabled: next })}
+                      label={label}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-display font-bold text-[11px] text-slate-950">{label}</p>
+                      <p className="text-[10px] text-slate-500">{hint}</p>
+                    </div>
+                    <NeonInput
+                      className="w-full sm:w-72"
+                      value={script.url}
+                      onChange={(e) => patchPageScript(kind, { url: e.target.value })}
+                      placeholder="Script src URL"
+                    />
+                  </div>
+                );
+              })}
+              <p className="text-[10px] leading-relaxed text-slate-500">
+                {adsDraft.consentRequired
+                  ? 'Gated by the same consent prompt as AdSense.'
+                  : 'Consent is off — these scripts load immediately.'}
+              </p>
+            </div>
+
             <div className="flex items-center justify-between gap-3 rounded-xl bg-white/70 px-3 py-2.5">
               <div className="min-w-0">
                 <p className="font-display font-bold text-[11px] text-slate-950">Require consent</p>
@@ -239,6 +301,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ settings, onSaved, onT
             <div className="space-y-2">
               {AD_PLACEMENT_META.map((meta) => {
                 const slot = adsDraft.slots?.[meta.id] ?? { enabled: false, slotId: '' };
+                const altSlot = adsDraft.altSlots?.[meta.id] ?? { enabled: false, code: '' };
                 return (
                   <div
                     key={meta.id}
@@ -257,17 +320,35 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ settings, onSaved, onT
                       className="w-full sm:w-44"
                       value={slot.slotId}
                       onChange={(e) => patchAdSlot(meta.id, { slotId: e.target.value })}
-                      placeholder="Ad unit id (digits)"
+                      placeholder="AdSense unit id (digits)"
+                    />
+                    <NeonToggle
+                      on={altSlot.enabled}
+                      onChange={(next) => patchAltSlot(meta.id, { enabled: next })}
+                      label="Alternative network"
+                    />
+                    <NeonTextarea
+                      className="w-full"
+                      rows={3}
+                      value={altSlot.code}
+                      onChange={(e) => patchAltSlot(meta.id, { code: e.target.value })}
+                      placeholder="Monetag / Adsterra zone code (used when no AdSense unit id is set) — paste the snippet exactly as provided"
                     />
                     {slot.slotId.trim() && !/^\d{6,20}$/.test(slot.slotId.trim()) && (
                       <p className="w-full text-[10px] font-semibold text-rose-600">
-                        Ad unit ids are numeric — copy the value from AdSense → Ads → By ad unit.
+                        AdSense unit ids are numeric — copy the value from AdSense → Ads → By ad unit.
                       </p>
                     )}
                   </div>
                 );
               })}
             </div>
+
+            <p className="text-[10px] leading-relaxed text-slate-500">
+              Each placement prefers AdSense; the alternative-network code takes over whenever the
+              AdSense unit id is empty or AdSense is disabled — so the two networks act as drop-in
+              fallbacks for every banner position.
+            </p>
 
             <p className="text-[10px] leading-relaxed text-slate-500">
               Ads never render on the player, PiP, admin or auth screens. Player pages are

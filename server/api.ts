@@ -433,6 +433,34 @@ function normalizeAdsSettings(
   }
 
   const maxPerPage = Number(patch.maxPerPage);
+
+  // Alternative networks: site-wide scripts (Monetag / Adsterra) and per-slot
+  // zone code. Whitelisted so a payload can never inject unknown keys.
+  const pageScripts: AdsSettings['pageScripts'] = { ...base.pageScripts };
+  if (patch.pageScripts && typeof patch.pageScripts === 'object' && !Array.isArray(patch.pageScripts)) {
+    for (const kind of ['monetag', 'adsterra'] as const) {
+      const raw = (patch.pageScripts as Record<string, unknown>)[kind];
+      if (!raw || typeof raw !== 'object') continue;
+      const entry = raw as { enabled?: unknown; url?: unknown };
+      pageScripts[kind] = {
+        enabled: Boolean(entry.enabled),
+        url: typeof entry.url === 'string' ? entry.url.trim() : '',
+      };
+    }
+  }
+  const altSlots: AdsSettings['altSlots'] = { ...base.altSlots };
+  if (patch.altSlots && typeof patch.altSlots === 'object' && !Array.isArray(patch.altSlots)) {
+    for (const id of AD_PLACEMENT_IDS) {
+      const raw = (patch.altSlots as Record<string, unknown>)[id];
+      if (!raw || typeof raw !== 'object') continue;
+      const entry = raw as { enabled?: unknown; code?: unknown };
+      altSlots[id] = {
+        enabled: Boolean(entry.enabled),
+        code: typeof entry.code === 'string' ? entry.code.slice(0, 8000) : '',
+      };
+    }
+  }
+
   return {
     enabled: typeof patch.enabled === 'boolean' ? patch.enabled : base.enabled,
     publisherId:
@@ -445,6 +473,8 @@ function normalizeAdsSettings(
         ? patch.consentRequired
         : base.consentRequired,
     slots,
+    pageScripts,
+    altSlots,
   };
 }
 

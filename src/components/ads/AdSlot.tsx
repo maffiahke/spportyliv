@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AD_META_BY_ID, AD_TEST_MODE, resolveAd } from '../../config/ads';
+import { AD_META_BY_ID, AD_TEST_MODE, resolveAd, resolveAltSlot } from '../../config/ads';
 import { fillAdSlot, subscribeAdsConsent } from '../../lib/adsense';
+import { injectAdCode } from '../../lib/altads';
 import type { AdPlacementId, AdsSettings } from '../../types/iptv';
 import { useAdAllowed } from './AdBudget';
 
@@ -30,8 +31,12 @@ export const AdSlot: React.FC<AdSlotProps> = ({
 }) => {
   const meta = AD_META_BY_ID[placement];
   const resolved = forcePlaceholder ? null : resolveAd(ads, placement);
+  // Alternative network (Monetag/Adsterra) zone code when no AdSense unit
+  // covers this placement.
+  const altCode = forcePlaceholder ? null : resolveAltSlot(ads, placement);
   const allowed = useAdAllowed(placement);
   const insRef = useRef<HTMLModElement | null>(null);
+  const altRef = useRef<HTMLDivElement | null>(null);
   // Re-run the fill effect when the viewer accepts the consent prompt.
   const [consentTick, setConsentTick] = useState(0);
 
@@ -42,16 +47,21 @@ export const AdSlot: React.FC<AdSlotProps> = ({
     void fillAdSlot(insRef.current, resolved.client, ads?.consentRequired !== false);
   }, [resolved?.client, resolved?.slotId, allowed, consentTick, ads?.consentRequired]);
 
+  useEffect(() => {
+    if (!altCode || !allowed || !altRef.current) return;
+    injectAdCode(altRef.current, altCode);
+  }, [altCode, allowed, consentTick]);
+
   const reserveStyle = {
     '--ad-h-mobile': `${meta.reserve.mobile}px`,
     '--ad-h-desktop': `${meta.reserve.desktop}px`,
   } as React.CSSProperties;
 
   // Outside the per-view budget: no markup at all (no placeholder, no request).
-  if (resolved && !allowed) return null;
+  if ((resolved || altCode) && !allowed) return null;
 
-  const showPlaceholder = !resolved && (forcePlaceholder || AD_TEST_MODE || import.meta.env.DEV);
-  if (!resolved && !showPlaceholder) return null;
+  const showPlaceholder = !resolved && !altCode && (forcePlaceholder || AD_TEST_MODE || import.meta.env.DEV);
+  if (!resolved && !altCode && !showPlaceholder) return null;
 
   return (
     <section
@@ -74,6 +84,11 @@ export const AdSlot: React.FC<AdSlotProps> = ({
             data-adtest={AD_TEST_MODE ? 'on' : undefined}
             style={{ display: 'block' }}
           />
+        </>
+      ) : altCode ? (
+        <>
+          <span className="ad-slot-label">Advertisement</span>
+          <div key={consentTick} ref={altRef} className="w-full" />
         </>
       ) : (
         <div className="ad-slot-placeholder">

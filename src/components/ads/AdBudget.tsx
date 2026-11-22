@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { resolveAd } from '../../config/ads';
+import { AD_META_BY_ID, resolveAd, resolveAltSlot } from '../../config/ads';
 import type { AdPlacementId, AdsSettings } from '../../types/iptv';
 
 /**
@@ -54,9 +54,9 @@ export const AdBudgetProvider: React.FC<AdBudgetProviderProps> = ({
     for (const id of candidateKey.split('|') as AdPlacementId[]) {
       if (allowedIds.size >= max) break;
       if (!id) continue;
-      const resolved = resolveAd(ads, id);
+      const resolved = resolveAd(ads, id) ?? resolveAltSlot(ads, id);
       if (!resolved) continue;
-      if (resolved.meta.desktopOnly && !isDesktop) continue;
+      if (AD_META_BY_ID[id].desktopOnly && !isDesktop) continue;
       allowedIds.add(id);
     }
     return allowedIds;

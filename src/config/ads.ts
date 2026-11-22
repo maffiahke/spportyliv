@@ -118,3 +118,20 @@ export function enabledPlacements(ads: AdsSettings | null | undefined): AdPlacem
   if (!ads?.enabled) return [];
   return AD_PLACEMENT_IDS.filter((id) => ads.slots?.[id]?.enabled);
 }
+
+/**
+ * The alternative-network (Monetag/Adsterra) zone code for one placement, or
+ * null. It only applies when the AdSense unit for that slot is missing or
+ * AdSense is off — AdSense stays the default network.
+ */
+export function resolveAltSlot(
+  ads: AdsSettings | null | undefined,
+  placement: AdPlacementId,
+): string | null {
+  if (!ads?.enabled) return null;
+  if (resolveAd(ads, placement)) return null;
+  const alt = ads.altSlots?.[placement];
+  if (!alt?.enabled) return null;
+  const code = alt.code.trim();
+  return code ? code : null;
+}

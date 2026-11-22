@@ -45,6 +45,7 @@ import { LiveTVView, ChannelShelf } from './components/LiveTVView';
 import { AdSlot } from './components/ads/AdSlot';
 import { AdBudgetProvider } from './components/ads/AdBudget';
 import { AdsConsentBanner } from './components/ads/AdsConsentBanner';
+import { AltNetworkScripts } from './components/ads/AltNetworkScripts';
 import type { AdPlacementId } from './types/iptv';
 import { FixturesView } from './components/FixturesView';
 import { ProfileView } from './components/ProfileView';
@@ -1136,6 +1137,7 @@ export default function App() {
 
       {/* EEA/UK consent prompt; AdSense stays unloaded until the viewer answers */}
       {!isFullPlayerOpen && <AdsConsentBanner ads={ads} />}
+      <AltNetworkScripts ads={ads} />
     </div>
   );
 }

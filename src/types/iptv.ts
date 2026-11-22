@@ -210,6 +210,22 @@ export interface AdSlotSettings {
   slotId: string;
 }
 
+/** Site-wide alternative-network script, injected once per page. */
+export type AdNetworkKind = 'monetag' | 'adsterra';
+
+export interface AdPageScriptSettings {
+  enabled: boolean;
+  /** Full script src copied from the network dashboard (MultiTag / Social Bar). */
+  url: string;
+}
+
+/** Raw zone code (Monetag/Adsterra banner, native, etc.) used in one slot. */
+export interface AdCodeSlotSettings {
+  enabled: boolean;
+  /** The snippet exactly as the network dashboard provides it. */
+  code: string;
+}
+
 /** AdSense configuration managed from the admin console. */
 export interface AdsSettings {
   enabled: boolean;
@@ -220,6 +236,11 @@ export interface AdsSettings {
   /** Wait for a consent signal before loading the AdSense script (EEA/UK). */
   consentRequired: boolean;
   slots: Partial<Record<AdPlacementId, AdSlotSettings>>;
+  /** Site-wide alternative networks — Monetag MultiTag, Adsterra Social Bar. */
+  pageScripts?: Partial<Record<AdNetworkKind, AdPageScriptSettings>>;
+  /** Per-slot alternative network zone code; wins when the AdSense unit id
+   *  for that slot is empty (or AdSense is off). */
+  altSlots?: Partial<Record<AdPlacementId, AdCodeSlotSettings>>;
 }
 
 export const AD_PLACEMENT_IDS: AdPlacementId[] = [
@@ -240,6 +261,13 @@ export const DEFAULT_ADS_SETTINGS: AdsSettings = {
   slots: Object.fromEntries(
     AD_PLACEMENT_IDS.map((id) => [id, { enabled: false, slotId: '' }]),
   ) as AdsSettings['slots'],
+  pageScripts: {
+    monetag: { enabled: false, url: '' },
+    adsterra: { enabled: false, url: '' },
+  },
+  altSlots: Object.fromEntries(
+    AD_PLACEMENT_IDS.map((id) => [id, { enabled: false, code: '' }]),
+  ) as AdsSettings['altSlots'],
 };
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
