@@ -310,17 +310,18 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({
           if (cancelled) return;
           if (Hls.isSupported()) {
             hls = new Hls({
-              // Streams are proxied same-origin; keep buffering modest for live.
-              lowLatencyMode: true,
+              // Streams are proxied same-origin; these are standard IPTV HLS
+              // playlists, so avoid low-latency playlist spam and let hls.js
+              // buffer generously for a smooth start and fewer stalls.
               backBufferLength: 30,
-              // The rolling upstream keeps only ~2 segments fetchable at a time:
-              // hold a tighter buffer, start at the live edge, and retry the
-              // playlist quickly so a missed segment can't stall the stream.
-              maxBufferLength: 8,
-              maxMaxBufferLength: 16,
-              maxBufferSize: 30 * 1000 * 1000,
+              maxBufferLength: 24,
+              maxMaxBufferLength: 60,
+              maxBufferSize: 60 * 1000 * 1000,
+              // Hold the start close to the live edge without starving the
+              // buffer, and fetch the first fragment while init completes.
               liveSyncDurationCount: 2,
               liveDurationInfinity: false,
+              startFragPrefetch: true,
               fragLoadingMaxRetry: 6,
               manifestLoadingMaxRetry: 4,
               levelLoadingMaxRetry: 4,

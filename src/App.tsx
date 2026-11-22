@@ -48,6 +48,7 @@ import { AdsConsentBanner } from './components/ads/AdsConsentBanner';
 import type { AdPlacementId } from './types/iptv';
 import { FixturesView } from './components/FixturesView';
 import { ProfileView } from './components/ProfileView';
+import { isHlsPlaybackUrl } from './lib/proxy';
 
 interface ActiveStreamState {
   match: LiveMatch;
@@ -357,6 +358,13 @@ export default function App() {
     if (channel) rememberRecentChannel(channel.id);
     setPlayerIsPlaying(true);
     setActiveStream({ match: effectiveMatch, channel: channel ?? null, isPip: false });
+    // Start loading the stream before the player screen finishes mounting:
+    // re-warm the hls.js module (in case the idle preload hasn't fired yet)
+    // and prefetch the playlist through the proxy so the upstream connection
+    // and the server-side playlist cache are hot by the time hls.js asks.
+    const warmUrl = channel?.streamUrl ?? effectiveMatch.videoUrl;
+    void import('hls.js').catch(() => undefined);
+    if (warmUrl && isHlsPlaybackUrl(warmUrl)) void fetch(warmUrl).catch(() => undefined);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 

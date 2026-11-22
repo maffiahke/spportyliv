@@ -93,12 +93,14 @@ export const PipPlayer: React.FC<PipPlayerProps> = ({
           if (cancelled) return;
           if (Hls.isSupported()) {
             hls = new Hls({
-              lowLatencyMode: true,
+              // Same tuning as the player screen: standard live edge + a
+              // generous buffer so PiP playback survives network hiccups.
               backBufferLength: 30,
-              // Same rolling-window tuning as the player screen.
-              maxBufferLength: 8,
-              maxMaxBufferLength: 16,
+              maxBufferLength: 24,
+              maxMaxBufferLength: 60,
+              maxBufferSize: 60 * 1000 * 1000,
               liveSyncDurationCount: 2,
+              startFragPrefetch: true,
               fragLoadingMaxRetry: 6,
               fragLoadingRetryDelay: 500,
             });

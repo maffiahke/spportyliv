@@ -446,6 +446,43 @@ function rewriteM3U8(text: string, baseUrl: string, headers: StreamHeaders, prox
   return outLines.join('\n');
 }
 
+/* Playlist micro-cache: hls.js re-polls the live playlist every few seconds
+ * per viewer, and each poll used to round-trip all the way upstream. A tiny
+ * in-memory cache keyed by upstream URL + injected headers serves repeat
+ * requests instantly, and the client's pre-open prefetch primes it so the
+ * player's first manifest request is already warm. */
+interface CachedPlaylist {
+  expires: number;
+  status: number;
+  contentType: string;
+  body: string;
+}
+const PLAYLIST_CACHE_MAX = 300;
+const playlistCache = new Map<string, CachedPlaylist>();
+
+/** TTL by playlist kind: VOD is immutable, master lists change rarely, live
+ *  media playlists must stay fresh (short TTL only dedupes rapid polls). */
+function playlistCacheTtlMs(text: string): number {
+  if (text.includes('#EXT-X-ENDLIST')) return 60_000;
+  if (text.includes('#EXT-X-STREAM-INF')) return 15_000;
+  return 1_500;
+}
+
+function sendPlaylist(
+  res: import('http').ServerResponse,
+  status: number,
+  contentType: string,
+  body: string
+): void {
+  res.statusCode = status;
+  res.setHeader('content-type', contentType);
+  // Clients (and any CDN hop) must always re-fetch the live playlist; but
+  // let the browser cache it for a moment to smooth the polling loop.
+  res.setHeader('cache-control', 'no-store, max-age=0');
+  res.setHeader('access-control-allow-origin', '*');
+  res.end(body);
+}
+
 async function handleStreamProxy(
   req: import('http').IncomingMessage,
   res: import('http').ServerResponse,
@@ -508,16 +545,30 @@ async function handleStreamProxy(
 
   // HLS playlists must be rewritten so every child request flows through the proxy with the same headers.
   if (isPlaylistMime(contentType, currentUrl)) {
+    const responseContentType = contentType.includes('mpegurl')
+      ? contentType
+      : 'application/vnd.apple.mpegurl';
+    const cacheKey = `${currentUrl}\n${JSON.stringify(headers ?? {})}`;
+    const cached = playlistCache.get(cacheKey);
+    if (cached && cached.expires > Date.now()) {
+      sendPlaylist(res, cached.status, cached.contentType, cached.body);
+      return;
+    }
     try {
       const text = await upstream.text();
       const rewritten = rewriteM3U8(text, currentUrl, headers, '/api/iptv/stream');
-      res.statusCode = upstream.status;
-      res.setHeader('content-type', contentType.includes('mpegurl') ? contentType : 'application/vnd.apple.mpegurl');
-      // Clients (and any CDN hop) must always re-fetch the live playlist; but
-      // let the browser cache it for a moment to smooth the polling loop.
-      res.setHeader('cache-control', 'no-store, max-age=0');
-      res.setHeader('access-control-allow-origin', '*');
-      res.end(rewritten);
+      playlistCache.set(cacheKey, {
+        expires: Date.now() + playlistCacheTtlMs(text),
+        status: upstream.status,
+        contentType: responseContentType,
+        body: rewritten,
+      });
+      if (playlistCache.size > PLAYLIST_CACHE_MAX) {
+        // Map keeps insertion order — drop the oldest entry when full.
+        const oldest = playlistCache.keys().next().value;
+        if (oldest !== undefined) playlistCache.delete(oldest);
+      }
+      sendPlaylist(res, upstream.status, responseContentType, rewritten);
     } catch (err) {
       res.statusCode = 502;
       res.end(JSON.stringify({ error: `Playlist rewrite failed: ${(err as Error).message}` }));
