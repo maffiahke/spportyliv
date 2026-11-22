@@ -855,23 +855,6 @@ export default function App() {
                 {/* Home top unit: below the hero + sport row, above Live Now */}
                 <AdSlot placement="home-top" ads={ads} />
 
-                {/* Recent Channels — one column; only channels this device tuned
-                    into before; hides entirely until the first watch */}
-                {recentChannels.length > 0 && (
-                  <ChannelShelf
-                    title="Recent Channels"
-                    channels={showAllRecentChannels ? recentChannels : recentChannels.slice(0, 6)}
-                    expanded={showAllRecentChannels}
-                    onToggleExpand={() => setShowAllRecentChannels((v) => !v)}
-                    onSelectChannel={(channel) =>
-                      openPlayerScreen(
-                        content.liveMatches.find((m) => m.id === channel.linkedMatchId),
-                        channel,
-                      )
-                    }
-                  />
-                )}
-
                 {/* Live Now + Upcoming Events */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-start">
                   {/* Live Now + Upcoming Column */}
@@ -1020,6 +1003,23 @@ export default function App() {
                   </section>
                   )}
                 </div>
+
+                {/* Recent Channels — the last section on Home; only channels this
+                    device tuned into before; hides entirely until the first watch */}
+                {recentChannels.length > 0 && (
+                  <ChannelShelf
+                    title="Recent Channels"
+                    channels={showAllRecentChannels ? recentChannels : recentChannels.slice(0, 6)}
+                    expanded={showAllRecentChannels}
+                    onToggleExpand={() => setShowAllRecentChannels((v) => !v)}
+                    onSelectChannel={(channel) =>
+                      openPlayerScreen(
+                        content.liveMatches.find((m) => m.id === channel.linkedMatchId),
+                        channel,
+                      )
+                    }
+                  />
+                )}
               </>
             )}
 
